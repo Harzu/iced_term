@@ -1,0 +1,12 @@
+[package]
+name = "iced-alacritty"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+alacritty_terminal = "0.18.0"
+iced = { version = "0.8.0", features = ["smol", "tokio", "canvas", "wgpu"] }
+iced_native = "0.9.1"
+iced_graphics = "0.8.0"
