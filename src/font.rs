@@ -1,10 +1,12 @@
-use alacritty_terminal::ansi::NamedColor;
+use alacritty_terminal::vte::ansi::NamedColor;
 use iced::Color;
 
-pub fn get_color(c: alacritty_terminal::ansi::Color) -> Color {
+pub const FONT_PATH: &str = "../fonts/Hack Regular Nerd Font Complete.ttf";
+
+pub fn get_color(c: alacritty_terminal::vte::ansi::Color) -> Color {
     match c {
-        alacritty_terminal::ansi::Color::Spec(rgb) => Color::from_rgb8(rgb.r, rgb.g, rgb.b),
-        alacritty_terminal::ansi::Color::Named(c) => match c {
+        alacritty_terminal::vte::ansi::Color::Spec(rgb) => Color::from_rgb8(rgb.r, rgb.g, rgb.b),
+        alacritty_terminal::vte::ansi::Color::Named(c) => match c {
             NamedColor::Foreground => Color::from_rgb8(235, 218, 177),
             NamedColor::Background => Color::from_rgb8(40, 39, 39),
             NamedColor::Green => Color::from_rgb8(152, 150, 26),
