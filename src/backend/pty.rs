@@ -13,6 +13,7 @@ pub struct Pty {
     id: u64,
     pty: alacritty_terminal::tty::Pty,
     term: alacritty_terminal::Term<EventProxy>,
+    reader: File,
     parser: ansi::Processor,
 }
 
@@ -27,12 +28,15 @@ impl Pty {
             num_cols: settings.cols,
             num_lines: settings.rows,
         };
-        let pty = alacritty_terminal::tty::new(&pty_config, window_size, id)?;
+
+        let mut pty = alacritty_terminal::tty::new(&pty_config, window_size, id)?;
         let term_size = TermSize::new(settings.cols as usize, settings.rows as usize);
+        let reader = pty.reader().try_clone()?;
 
         Ok(Self {
             id,
             pty,
+            reader,
             term: alacritty_terminal::Term::new(config, &term_size, EventProxy {}),
             parser: ansi::Processor::new()
         })
@@ -66,8 +70,8 @@ impl Pty {
         ));
     }
 
-    pub fn new_reader(&mut self) -> File {
-        self.pty.reader().try_clone().unwrap()
+    pub fn reader(&self) -> File {
+        self.reader.try_clone().unwrap()
     }
 
     pub fn update(&mut self, data: Vec<u8>) {

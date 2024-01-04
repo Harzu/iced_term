@@ -1,103 +1,108 @@
+use std::fs::File;
 use std::io::Result;
-// use iced::advanced::graphics::{geometry};
-use iced::advanced::widget;
-use iced::advanced::layout::Layout;
-use iced::advanced::renderer;
+use iced::widget::{Canvas, canvas};
 use iced::{Element, Font, Length, Point, Rectangle, Size, Theme, Subscription};
 use iced::mouse::Cursor;
-use iced::advanced::Widget;
-use iced::widget::{Canvas, canvas::Cache};
-use iced::widget::canvas::{Path, Text, Renderer};
+use iced::widget::canvas::{Cache, Geometry};
+use iced::widget::canvas::{Path, Text};
+// use iced::renderer::Renderer;
 use tokio::time::sleep;
 use crate::backend::{self, RenderableCell};
 use crate::font;
-
-pub struct ITerm {
-    id: u64,
-    pty: backend::Pty,
-    view: ITermView
-}
+use ab_glyph;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    DataUpdated((u64, Vec<u8>)),
-    Ignored,
+    DataUpdated(u64, Vec<u8>),
+    CharacterReceived(u64, char),
+    Ignored(u64),
 }
 
-pub enum Command {
-    Redraw
+pub fn iterm(id: u64) -> Result<(backend::Pty, ITermView)> {
+    let pty = backend::Pty::new(id, backend::Settings::default())?;
+    Ok((
+        pty,
+        ITermView::new(id),
+    ))
 }
 
-impl ITerm {
-    pub fn new(id: u64) -> Result<Self> {
-        Ok(Self {
+pub struct ITermView {
+    pub id: u64,
+    cache: Cache,
+    renderable_content: Vec<RenderableCell>
+}
+
+impl ITermView
+{
+    fn new(id: u64) -> Self {
+        Self {
             id,
-            pty: backend::Pty::new(id, backend::Settings::default())?,
-            view: ITermView::default(),
-        })
+            renderable_content: vec![],
+            cache: Cache::default(),
+        }
+    }
+}
+
+impl ITermView {
+    pub fn update(&mut self, content: Vec<RenderableCell>) {
+        self.renderable_content = content;
+        self.request_redraw();
     }
 
-    pub fn subscribe(&mut self) -> Subscription<Message> {
-        let reader = self.pty.new_reader();
-        let id = self.id.clone();
+    pub fn request_redraw(&self) {
+        self.cache.clear();
+    }
+
+    pub fn view(&self) -> Element<Message> {
+        Canvas::new(self)
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .into()
+    }
+
+    pub fn on_data_received(id: u64, reader: File) -> Subscription<Message> {
         iced::subscription::unfold(id, reader, move |reader| async move {
             sleep(std::time::Duration::from_millis(1)).await;
             match backend::Pty::try_read(&reader).await {
-                Some(data) => (Message::DataUpdated((id, data)), reader),
-                None => (Message::Ignored, reader)
+                Some(data) => (Message::DataUpdated(id, data), reader),
+                None => (Message::Ignored(id), reader)
             }
         })
     }
 }
 
-#[derive(Default)]
-struct ITermView {
-    cache: Cache,
-    renderable_content: Vec<RenderableCell>
-}
-
-impl ITermView {
-    fn update(&mut self, content: Vec<RenderableCell>) {
-        self.renderable_content = content;
-        self.cache.clear();
-    }
-}
-
-impl<Message> Widget<Message, iced::Renderer<Theme>> for ITermView
+impl canvas::Program<Message> for ITermView
 {
-    fn width(&self) -> Length {
-        Length::Fill
-    }
+    type State = ();
 
-    fn height(&self) -> Length {
-        Length::Fill
-    }
-
-    fn layout(
+    fn update(
         &self,
-        _renderer: &iced::Renderer,
-        limits: &iced::advanced::layout::Limits,
-    ) -> iced::advanced::layout::Node {
-        let size = limits
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .resolve(Size::ZERO);
-
-        iced::advanced::layout::Node::new(size)
+        _state: &mut Self::State,
+        event: canvas::Event,
+        _bounds: Rectangle,
+        _cursor: iced::mouse::Cursor,
+    ) -> (canvas::event::Status, Option<Message>) {
+        match event {
+            canvas::Event::Keyboard(e) => match e {
+                iced::keyboard::Event::CharacterReceived(c) => {
+                    (canvas::event::Status::Captured, Some(Message::CharacterReceived(self.id, c)))
+                },
+                _ => (canvas::event::Status::Ignored, None)
+            }
+            _ => (canvas::event::Status::Ignored, None)
+        }
     }
 
     fn draw(
         &self,
-        _state: &widget::Tree,
-        renderer: &mut iced::Renderer<Theme>,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
         _theme: &Theme,
-        _style: &renderer::Style,
-        _layout: Layout,
+        bounds: Rectangle,
         _cursor: Cursor,
-        viewport: &Rectangle,
-    ) {
-        let geom = self.cache.draw(renderer, viewport.size(), |frame| {
-            let cell_width = 13.0;
+    ) -> Vec<Geometry> {
+        let geom = self.cache.draw(renderer, bounds.size(), |frame| {
+            let cell_width = 15.0;
             let cell_height = 20.0;
 
             for cell in &self.renderable_content {
@@ -134,67 +139,6 @@ impl<Message> Widget<Message, iced::Renderer<Theme>> for ITermView
             }
         });
 
-        renderer.draw(vec![geom]);
+        vec![geom]
     }
 }
-
-impl<'a, Message> From<ITermView> for Element<'a, Message, iced::Renderer<Theme>>
-{
-    fn from(widget: ITermView) -> Self {
-        Self::new(widget)
-    }
-}
-
-// impl<Message> canvas::Program<Message> for ITerm {
-//     type State = ();
-
-//     fn draw(
-//         &self,
-//         _state: &Self::State,
-//         renderer: &Renderer,
-//         _theme: &Theme,
-//         bounds: Rectangle,
-//         _cursor: Cursor,
-//     ) -> Vec<Geometry> {
-
-//         let geom = self.cache.draw(renderer, bounds.size(), |frame| {
-//             let cell_width = 13.0;
-//             let cell_height = 20.0;
-
-//             for cell in self.pty.cells() {
-//                 let x = cell.column as f64 * cell_width;
-//                 let y = (cell.line as f64 + cell.display_offset as f64) * cell_height;
-//                 let fg = font::get_color(cell.fg);
-//                 let bg = font::get_color(cell.bg);
-
-//                 let size = Size::new(cell_width as f32, cell_height as f32);
-//                 let background = Path::rectangle(
-//                     Point {
-//                         x: x as f32,
-//                         y: y as f32,
-//                     },
-//                     size,
-//                 );
-//                 frame.fill(&background, bg);
-
-//                 if cell.content != ' ' && cell.content != '\t' {
-//                     let text = Text {
-//                         content: cell.content.to_string(),
-//                         position: Point {
-//                             x: x as f32,
-//                             y: y as f32,
-//                         },
-//                         font: Font::default(),
-//                         size: 20.0,
-//                         color: fg,
-//                         ..Text::default()
-//                     };
-
-//                     frame.fill_text(text);
-//                 }
-//             }
-//         });
-
-//         vec![geom]
-//     }
-// }
