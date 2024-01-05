@@ -1,4 +1,4 @@
-const DEFAULT_LINUX_SHELL: &str = "/bin/bash";
+const DEFAULT_SHELL: &str = "/bin/bash";
 const DEFAULT_COLS_NUM: u16 = 50;
 const DEFAULT_ROWS_NUM: u16 = 50;
 
@@ -11,7 +11,7 @@ pub struct Settings {
 impl Default for  Settings {
     fn default() -> Self {
         Self {
-            shell: DEFAULT_LINUX_SHELL.to_string(),
+            shell: DEFAULT_SHELL.to_string(),
             cols: DEFAULT_COLS_NUM,
             rows: DEFAULT_ROWS_NUM,
         }

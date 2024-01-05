@@ -50,25 +50,10 @@ impl Pty {
         let mut file = tokio::fs::File::from(reader.try_clone().unwrap());
         let mut buf = [0; 4096];
         match file.read(&mut buf).await {
-            Ok(_) => Some(buf.to_vec()),
+            Ok(n) => Some(buf.to_vec()),
             _ => None
         }
     }
-
-    // pub fn resize(&mut self, rows: u16, cols: u16) {
-    //     let size = WindowSize {
-    //         cell_width: 1,
-    //         cell_height: 1,
-    //         num_cols: cols,
-    //         num_lines: rows,
-    //     };
-
-    //     self.pty.on_resize(size);
-    //     self.term.resize(TermSize::new(
-    //         size.num_cols as usize,
-    //         size.num_lines as usize,
-    //     ));
-    // }
 
     pub fn resize(
         &mut self,
@@ -78,10 +63,10 @@ impl Pty {
         font_width: f32,
         font_height: f32,
     ) {
-        let container_width = container_width.max(1) - padding as u32;
-        let container_height = container_height.max(1) - padding as u32;
-        let rows = (container_height as f32 / font_height).round() as u16;
-        let cols = (container_width as f32 / font_width).round() as u16;
+        let container_width = container_width.max(1) - 2 * padding as u32;
+        let container_height = container_height.max(1) - 2 * padding as u32;
+        let rows = (container_height as f32 / font_height).floor() as u16;
+        let cols = (container_width as f32 / font_width).floor() as u16;
 
         let size = WindowSize {
             cell_width: font_width as u16,

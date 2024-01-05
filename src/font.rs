@@ -1,7 +1,27 @@
-use alacritty_terminal::vte::ansi::NamedColor;
+use iced::{Font, Size, Theme};
+use iced::advanced::text;
+use iced_graphics::renderer::Renderer;
+use iced_tiny_skia::{Backend, Settings};
 use iced::Color;
+use alacritty_terminal::vte::ansi::NamedColor;
 
-pub const FONT_PATH: &str = "../fonts/Hack Regular Nerd Font Complete.ttf";
+pub fn font_measure(font_size: f32) -> Size<f32> {
+    let backend = Backend::new(Settings {
+        default_font: Font::default(),
+        default_text_size: font_size,
+    });
+
+    let renderer: Renderer<Backend, Theme> = Renderer::new(backend);
+    text::Renderer::measure(
+        &renderer, 
+        "W", 
+        font_size,
+        iced::widget::text::LineHeight::Relative(1.2),
+        Font::default(),
+        Size { width: 0.0, height: 0.0 },
+        iced::widget::text::Shaping::Advanced,
+    )
+}
 
 pub fn get_color(c: alacritty_terminal::vte::ansi::Color) -> Color {
     match c {

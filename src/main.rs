@@ -1,13 +1,12 @@
 use std::collections::HashMap;
-use iced::widget::canvas::path::lyon_path::geom::euclid::default;
 use iced::{
     executor, window, Command, Element, Length,
-    Settings, Theme, Application, Subscription, Color,
+    Settings, Theme, Application, Subscription,
 };
 use iced::widget::container;
 
-use iced_myterm::backend::Pty;
-use iced_myterm::component::{self, ITermView};
+use iced_myterm::Pty;
+use iced_myterm::{self, Event, Term};
 
 fn main() -> iced::Result {
     App::run(Settings {
@@ -22,12 +21,12 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    TermMessage(component::Message),
+    TermMessage(Event),
     GlobalEvent(iced::Event),
 }
 
 struct App {
-    tabs: HashMap<u64, (Pty, component::ITermView)>,
+    tabs: HashMap<u64, (Pty, Term)>,
 }
 
 impl Application for App {
@@ -38,7 +37,7 @@ impl Application for App {
     
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let tab_id = 0;
-        let tab = component::iterm(tab_id, 14.0).unwrap();
+        let tab = iced_myterm::init(tab_id, 10.0).expect("init pty is failed");
         let mut tabs = HashMap::new();
         tabs.insert(tab_id, tab);
         (
@@ -56,14 +55,14 @@ impl Application for App {
         match message {
             Message::TermMessage(m) => {
                 match m {
-                    component::Message::CharacterReceived(id, c) => {
+                    Event::InputReceived(id, c) => {
                         let (backend, _) = self.tabs.get_mut(&id).unwrap();
                         backend.write_to_pty(c)
                     },
-                    component::Message::DataUpdated(id, data) => {
+                    Event::DataUpdated(id, data) => {
                         let (backend, view) = self.tabs.get_mut(&id).unwrap();
                         let rendarable_content = backend.update(data);
-                        view.update(rendarable_content);
+                        view.update_and_redraw(rendarable_content);
                     }
                     _ => {}
                 };
@@ -76,11 +75,11 @@ impl Application for App {
                         iced::window::Event::Resized { width, height } => {
                             let tab_id = 0;
                             let (backend, view) = self.tabs.get_mut(&tab_id).unwrap();
-                            let font_measure = view.font_measure.clone();
+                            let font_measure = view.font_measure();
                             backend.resize(
                                 width, 
                                 height,
-                                view.padding,
+                                view.inner_padding(),
                                 font_measure.width,
                                 font_measure.height,
                             );
@@ -101,7 +100,7 @@ impl Application for App {
         let mut sb = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            let sub = ITermView::on_data_received(id.clone(), tab.0.reader())
+            let sub = iced_myterm::data_received_subscription(id.clone(), tab.0.reader())
                 .map(|e| Message::TermMessage(e));
 
             sb.push(sub)
@@ -115,8 +114,8 @@ impl Application for App {
 
     fn view(&self) -> Element<Message> {
         let tab_id = 0;
-        let (_, iterm_view) = self.tabs.get(&tab_id).unwrap();
-        let tab_view = iterm_view.view()
+        let (_, term_view) = self.tabs.get(&tab_id).unwrap();
+        let tab_view = term_view.view()
             .map(move |e| Message::TermMessage(e));
 
         container(tab_view)
