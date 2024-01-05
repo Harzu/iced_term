@@ -1,15 +1,14 @@
 use std::fs::File;
 use std::io::Result;
-use iced::widget::{Canvas, canvas};
-use iced::{Element, Font, Length, Point, Rectangle, Size, Theme, Subscription};
+use iced::alignment::{Horizontal, Vertical};
+use iced::widget::{Canvas, canvas, container};
+use iced::{Element, Font, Length, Point, Rectangle, Size, Theme, Subscription, Color};
 use iced::mouse::Cursor;
 use iced::widget::canvas::{Cache, Geometry};
 use iced::widget::canvas::{Path, Text};
-// use iced::renderer::Renderer;
 use tokio::time::sleep;
 use crate::backend::{self, RenderableCell};
 use crate::font;
-use ab_glyph;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -18,25 +17,49 @@ pub enum Message {
     Ignored(u64),
 }
 
-pub fn iterm(id: u64) -> Result<(backend::Pty, ITermView)> {
+pub fn iterm(id: u64, font_size: f32) -> Result<(backend::Pty, ITermView)> {
     let pty = backend::Pty::new(id, backend::Settings::default())?;
     Ok((
         pty,
-        ITermView::new(id),
+        ITermView::new(id, font_size),
     ))
+}
+
+pub fn measure_width(font_size: f32) -> Size<f32> {
+    let backend = iced_tiny_skia::Backend::new(iced_tiny_skia::Settings {
+        default_font: Font::default(),
+        default_text_size: font_size,
+    });
+
+    let renderer: iced_graphics::renderer::Renderer<iced_tiny_skia::Backend, Theme> = iced_graphics::renderer::Renderer::new(backend);
+    iced::advanced::text::Renderer::measure(
+        &renderer, 
+        "W", 
+        font_size,
+        iced::widget::text::LineHeight::Relative(1.2),
+        Font::default(),
+        Size { width: 0.0, height: 0.0 },
+        iced::widget::text::Shaping::Advanced,
+    )
 }
 
 pub struct ITermView {
     pub id: u64,
+    pub font_size: f32,
+    pub font_measure: Size<f32>,
+    pub padding: u16,
     cache: Cache,
     renderable_content: Vec<RenderableCell>
 }
 
 impl ITermView
 {
-    fn new(id: u64) -> Self {
+    fn new(id: u64, font_size: f32) -> Self {
         Self {
             id,
+            font_size,
+            font_measure: measure_width(font_size),
+            padding: 0,
             renderable_content: vec![],
             cache: Cache::default(),
         }
@@ -54,9 +77,15 @@ impl ITermView {
     }
 
     pub fn view(&self) -> Element<Message> {
-        Canvas::new(self)
+        let canvas = Canvas::new(self)
             .height(Length::Fill)
+            .width(Length::Fill);
+
+        container(canvas)
             .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(self.padding)
+            // .style(Style::default())
             .into()
     }
 
@@ -69,6 +98,20 @@ impl ITermView {
             }
         })
     }
+}
+
+#[derive(Default)]
+struct Style;
+
+impl container::StyleSheet for Style {
+    fn appearance(&self, style: &Self::Style) -> container::Appearance {
+        container::Appearance {
+            background: Some(Color::from_rgb8(40, 39, 39).into()), // Set the background color here
+            ..container::Appearance::default()
+        }   
+    }
+
+    type Style = Style;
 }
 
 impl canvas::Program<Message> for ITermView
@@ -102,12 +145,12 @@ impl canvas::Program<Message> for ITermView
         _cursor: Cursor,
     ) -> Vec<Geometry> {
         let geom = self.cache.draw(renderer, bounds.size(), |frame| {
-            let cell_width = 15.0;
-            let cell_height = 20.0;
-
             for cell in &self.renderable_content {
-                let x = cell.column as f64 * cell_width;
-                let y = (cell.line as f64 + cell.display_offset as f64) * cell_height;
+                let cell_width = self.font_measure.width as f64;
+                let cell_height = self.font_measure.height as f64;
+                
+                let x = cell.column as f64 * cell_width as f64;
+                let y = (cell.line as f64 + cell.display_offset as f64) * cell_height as f64;
                 let fg = font::get_color(cell.fg);
                 let bg = font::get_color(cell.bg);
 
@@ -129,8 +172,10 @@ impl canvas::Program<Message> for ITermView
                             y: y as f32,
                         },
                         font: Font::default(),
-                        size: 20.0,
+                        size: self.font_size,
                         color: fg,
+                        horizontal_alignment: Horizontal::Center,
+                        vertical_alignment: Vertical::Top,
                         ..Text::default()
                     };
 

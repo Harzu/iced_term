@@ -9,7 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80179d7dd5d7e8c285d67c4a1e652972a92de7475beddfb92028c76463b13225"
 dependencies = [
  "ab_glyph_rasterizer",
- "libm",
  "owned_ttf_parser",
 ]
 
@@ -18,9 +17,6 @@ name = "ab_glyph_rasterizer"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c71b1793ee61086797f5c80b6efa2b8ffa6d5dd703f118545808a7f2e27f7046"
-dependencies = [
- "libm",
-]
 
 [[package]]
 name = "addr2line"
@@ -1117,9 +1113,10 @@ dependencies = [
 name = "iced-myterm"
 version = "0.1.0"
 dependencies = [
- "ab_glyph",
  "alacritty_terminal",
  "iced",
+ "iced_graphics",
+ "iced_tiny_skia",
  "tokio",
 ]
 

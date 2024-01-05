@@ -23,8 +23,8 @@ impl Pty {
         pty_config.shell = Some(alacritty_terminal::tty::Shell::new(settings.shell, vec![]));
         let config = alacritty_terminal::term::Config::default();
         let window_size = alacritty_terminal::event::WindowSize {
-            cell_width: 1,
-            cell_height: 1,
+            cell_width: 13,
+            cell_height: 20,
             num_cols: settings.cols,
             num_lines: settings.rows,
         };
@@ -55,10 +55,37 @@ impl Pty {
         }
     }
 
-    pub fn resize(&mut self, rows: u16, cols: u16) {
+    // pub fn resize(&mut self, rows: u16, cols: u16) {
+    //     let size = WindowSize {
+    //         cell_width: 1,
+    //         cell_height: 1,
+    //         num_cols: cols,
+    //         num_lines: rows,
+    //     };
+
+    //     self.pty.on_resize(size);
+    //     self.term.resize(TermSize::new(
+    //         size.num_cols as usize,
+    //         size.num_lines as usize,
+    //     ));
+    // }
+
+    pub fn resize(
+        &mut self,
+        container_width: u32,
+        container_height: u32,
+        padding: u16,
+        font_width: f32,
+        font_height: f32,
+    ) {
+        let container_width = container_width.max(1) - padding as u32;
+        let container_height = container_height.max(1) - padding as u32;
+        let rows = (container_height as f32 / font_height).round() as u16;
+        let cols = (container_width as f32 / font_width).round() as u16;
+
         let size = WindowSize {
-            cell_width: 1,
-            cell_height: 1,
+            cell_width: font_width as u16,
+            cell_height: font_height as u16,
             num_cols: cols,
             num_lines: rows,
         };
@@ -74,10 +101,12 @@ impl Pty {
         self.reader.try_clone().unwrap()
     }
 
-    pub fn update(&mut self, data: Vec<u8>) {
+    pub fn update(&mut self, data: Vec<u8>) -> Vec<RenderableCell> {
         data.iter().for_each(|item| {
             self.parser.advance(&mut self.term, *item);
         });
+
+        self.cells()
     }
 
     pub fn write_to_pty(&mut self, c: char) {

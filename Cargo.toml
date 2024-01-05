@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 alacritty_terminal = "0.20.0"
-iced = { version = "0.10.0", features = ["smol", "tokio", "canvas", "wgpu", "lazy"] }
+iced = { version = "0.10.0", features = ["smol", "tokio", "canvas", "wgpu", "lazy", "advanced"] }
 tokio = { version = "1.23.0", features = ["full"]}
-ab_glyph = { default-features = false, features = ["libm"] }
+iced_graphics = "0.9.0"
+iced_tiny_skia = "0.1.0"
