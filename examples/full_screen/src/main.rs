@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use iced::advanced::graphics::core::Element;
 use iced::widget::container;
 use iced::{
-    executor, window, Command, Element, Length,
+    executor, window, Command, Length,
     Settings, Theme, Application, Subscription,
 };
 use iced_term::{self, Event, Term};
@@ -52,6 +53,7 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> iced::Command<Message> {
         match message {
             Message::TermMessage(m) => {
+                // println!("{:?}",m);
                 match m {
                     Event::InputReceived(id, c) => {
                         let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
@@ -65,23 +67,27 @@ impl Application for App {
                         let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
                         tab.update(iced_term::Command::Scroll(delta.1 as i32))
                     }
+                    Event::Resized(id, (width, height)) => {
+                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
+                        tab.update(iced_term::Command::Resize(width as u32, height as u32));
+                    }
                     _ => {}
                 };
 
                 Command::none()
             },
             Message::GlobalEvent(e) => {
-                match e {
-                    iced::Event::Window(window_event) => match window_event {
-                        iced::window::Event::Resized { width, height } => {
-                            self.tabs.iter_mut().for_each(|(id, tab)| {
-                                tab.update(iced_term::Command::Resize(width, height));
-                            });
-                        }
-                        _ => {},
-                    },
-                    _ => {}
-                }
+                // match e {
+                //     iced::Event::Window(window_event) => match window_event {
+                //         iced::window::Event::Resized { width, height } => {
+                //             self.tabs.iter_mut().for_each(|(id, tab)| {
+                //                 tab.update(iced_term::Command::Resize(width, height));
+                //             });
+                //         }
+                //         _ => {},
+                //     },
+                //     _ => {}
+                // }
 
                 Command::none()
             }
@@ -101,21 +107,32 @@ impl Application for App {
             sb.push(sub)
         }
 
-        let global_event_sub = iced::subscription::events().map(|e| Message::GlobalEvent(e));
+        let global_event_sub = iced::subscription::events()
+            .map(|e| Message::GlobalEvent(e));
         sb.push(global_event_sub);
 
         Subscription::batch(sb)
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<Message, iced::Renderer> {
         let tab_id = 0;
         let tab = self.tabs.get(&tab_id).expect("tab with target id not found");
-        let tab_view = tab.view()
-            .map(move |e| Message::TermMessage(e));
 
-        container(tab_view)
+        let view = tab.view2().map(move |e| Message::TermMessage(e));
+
+        // let tab_view: Element<Message> = tab.into().map();
+        container(view)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+
+        
+        // let tab_view = tab.view()
+        //     .map(move |e| Message::TermMessage(e));
+
+        // container(tab_view)
+        //     .width(Length::Fill)
+        //     .height(Length::Fill)
+        //     .into()
     }
 }

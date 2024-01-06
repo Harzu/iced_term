@@ -1,0 +1,18 @@
+Tasks:
+- add child pty mouse actions
+- add selectable cells
+- matching hell
+- add mouse clicks behaviour
+- add keyboard keybindings
+- add cursor
+- move draw logic to separate function for testing
+- add settings to widget
+- add themes
+- add readme
+- add docs
+- add examples
+- add work without PTY
+- add tests
+- add clippy
+- add fmt
+- close 

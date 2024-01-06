@@ -1,13 +1,15 @@
 use std::fs::File;
 use std::io::Write;
 use std::io::Result;
+use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::tty::EventedReadWrite;
 use alacritty_terminal::vte::ansi;
 use alacritty_terminal::event::{EventListener, OnResize, WindowSize};
 use alacritty_terminal::term::{test::TermSize, cell};
 use tokio::io::AsyncReadExt;
+use tokio::time::sleep;
 use crate::backend::RenderableCell;
-use crate::backend::Settings;
+use crate::backend::BackendSettings;
 
 pub struct Pty {
     id: u64,
@@ -18,7 +20,7 @@ pub struct Pty {
 }
 
 impl Pty {
-    pub fn new(id: u64, settings: Settings) -> Result<Self> {
+    pub fn new(id: u64, settings: BackendSettings) -> Result<Self> {
         let mut pty_config = alacritty_terminal::tty::Options::default();
         pty_config.shell = Some(alacritty_terminal::tty::Shell::new(settings.shell, vec![]));
         let config = alacritty_terminal::term::Config::default();
@@ -46,40 +48,58 @@ impl Pty {
         self.id
     }
 
-    pub async fn try_read(reader: &File) -> Option<Vec<u8>> {
+    pub async fn read(reader: &File) -> Option<Vec<u8>> {
         let mut file = tokio::fs::File::from(reader.try_clone().unwrap());
-        let mut buf = [0; 4096];
-        match file.read(&mut buf).await {
-            Ok(n) => Some(buf.to_vec()),
-            _ => None
+        let mut buf = Vec::new();
+        if let Ok(_) = file.read_buf(&mut buf).await {
+            return Some(buf)
+        };
+
+        if buf.len() == 0 {
+            sleep(std::time::Duration::from_millis(1)).await;
         }
+
+        None
     }
 
     pub fn resize(
         &mut self,
-        container_width: u32,
-        container_height: u32,
-        padding: u16,
+        // container_width: u32,
+        // container_height: u32,
+        // padding: u16,
+        rows: u16,
+        cols: u16,
         font_width: f32,
         font_height: f32,
-    ) {
-        let container_width = container_width.max(1) - 2 * padding as u32;
-        let container_height = container_height.max(1) - 2 * padding as u32;
-        let rows = (container_height as f32 / font_height).floor() as u16;
-        let cols = (container_width as f32 / font_width).floor() as u16;
+    ) -> Vec<RenderableCell> {
+        // let container_padding = padding.saturating_mul(2);
+        // let container_width = container_width.saturating_sub(container_padding as u32).max(1);
+        // let container_height = container_height.saturating_sub(container_padding as u32).max(1);
 
-        let size = WindowSize {
-            cell_width: font_width as u16,
-            cell_height: font_height as u16,
-            num_cols: cols,
-            num_lines: rows,
-        };
+        // let rows = (container_height as f32 / font_height).floor() as u16;
+        // let cols = (container_width as f32 / font_width).floor() as u16;
+        if rows > 0 && cols > 0 {
+            let size = WindowSize {
+                cell_width: font_width as u16,
+                cell_height: font_height as u16,
+                num_cols: cols,
+                num_lines: rows,
+            };
 
-        self.pty.on_resize(size);
-        self.term.resize(TermSize::new(
-            size.num_cols as usize,
-            size.num_lines as usize,
-        ));
+            self.pty.on_resize(size);
+            self.term.resize(TermSize::new(
+                size.num_cols as usize,
+                size.num_lines as usize,
+            ));
+        }
+
+        self.cells()
+    }
+
+    pub fn scroll(&mut self, delta_value: i32) -> Vec<RenderableCell> {
+        let scroll = Scroll::Delta(delta_value);
+        self.term.scroll_display(scroll);
+        self.cells()
     }
 
     pub fn reader(&self) -> File {
@@ -95,17 +115,20 @@ impl Pty {
     }
 
     pub fn write_to_pty(&mut self, c: char) {
+        self.term.scroll_display(Scroll::Bottom);
         self.pty.writer().write_all(&[c as u8]).unwrap();
     }
 
     pub fn cells(&self) -> Vec<RenderableCell> {
         let mut res = vec![];
         let content = self.term.renderable_content();
+
         for item in content.display_iter {
             let point = item.point;
             let cell = item.cell;
             let mut fg = cell.fg;
             let mut bg = cell.bg;
+
 
             // if cell.flags.contains(cell::Flags::DIM) || cell.flags.contains(cell::Flags::DIM_BOLD) {
             //     fg = ansi::Color::(fg.r(), fg.g(), fg.b(), 66);
