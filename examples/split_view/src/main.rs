@@ -1,19 +1,13 @@
-use std::collections::HashMap;
-
-use iced::alignment::{self, Alignment};
+use iced::alignment;
 use iced::executor;
-use iced::keyboard;
 use iced::theme::{self, Theme};
 use iced::widget::pane_grid::{self, PaneGrid};
-use iced::widget::{
-    button, column, container, responsive, row, scrollable, text,
-};
+use iced::widget::{button, container, responsive, row, text};
 use iced::{
-    window,
-    Application, Color, Command, Element, Length, Settings, Size, Subscription,
+    window, Application, Color, Command, Element, Length, Settings,
+    Subscription,
 };
-use iced_term::Pty;
-use iced_term::{self, Event, Term};
+use std::collections::HashMap;
 
 pub fn main() -> iced::Result {
     Example::run(Settings {
@@ -28,7 +22,8 @@ pub fn main() -> iced::Result {
 
 struct Example {
     panes: pane_grid::State<Pane>,
-    tabs: HashMap<u64, Term>,
+    tabs: HashMap<u64, iced_term::Term>,
+    term_settings: iced_term::TermSettings,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
 }
@@ -36,18 +31,10 @@ struct Example {
 #[derive(Debug, Clone)]
 enum Message {
     Split(pane_grid::Axis, pane_grid::Pane),
-    SplitFocused(pane_grid::Axis),
-    FocusAdjacent(pane_grid::Direction),
     Clicked(pane_grid::Pane),
-    Dragged(pane_grid::DragEvent),
     Resized(pane_grid::ResizeEvent),
-    TogglePin(pane_grid::Pane),
-    Maximize(pane_grid::Pane),
-    Restore,
     Close(pane_grid::Pane),
-    CloseFocused,
-    TermMessage(Event),
-    // GlobalEvent(iced::Event),
+    TermEvent(iced_term::Event),
 }
 
 impl Application for Example {
@@ -59,7 +46,15 @@ impl Application for Example {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let initial_pane_id = 0;
         let (panes, _) = pane_grid::State::new(Pane::new(initial_pane_id));
-        let tab = iced_term::Term::new(initial_pane_id as u64, 10.0);
+        let term_settings = iced_term::TermSettings {
+            font: iced_term::FontSettings { size: 14.0 },
+            backend: iced_term::BackendSettings {
+                shell: env!("SHELL").to_string(),
+                ..iced_term::BackendSettings::default()
+            },
+        };
+        let tab =
+            iced_term::Term::new(initial_pane_id as u64, term_settings.clone());
         let mut tabs = HashMap::new();
         tabs.insert(initial_pane_id as u64, tab);
 
@@ -67,7 +62,8 @@ impl Application for Example {
             Example {
                 panes,
                 panes_created: 1,
-                tabs: tabs,
+                tabs,
+                term_settings,
                 focus: None,
             },
             Command::none(),
@@ -75,123 +71,92 @@ impl Application for Example {
     }
 
     fn title(&self) -> String {
-        String::from("Pane grid - Iced")
+        String::from("Terminal with split panes")
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Split(axis, pane) => {
-                let result =
-                    self.panes.split(axis, &pane, Pane::new(self.panes_created));
+                let result = self.panes.split(
+                    axis,
+                    &pane,
+                    Pane::new(self.panes_created),
+                );
 
-                let tab = Term::new(self.panes_created as u64, 14.0);
+                let tab = iced_term::Term::new(
+                    self.panes_created as u64,
+                    self.term_settings.clone(),
+                );
                 self.tabs.insert(self.panes_created as u64, tab);
 
                 if let Some((pane, _)) = result {
                     let prev_focused_tab_id = (self.panes_created - 1) as u64;
-                    let prev_focused_tab = self.tabs.get_mut(&prev_focused_tab_id).expect("init pty is failed");
+                    let prev_focused_tab = self
+                        .tabs
+                        .get_mut(&prev_focused_tab_id)
+                        .expect("init pty is failed");
                     prev_focused_tab.update(iced_term::Command::LostFocus);
                     self.focus = Some(pane);
                 }
 
                 self.panes_created += 1;
-            }
-            Message::SplitFocused(axis) => {
-                if let Some(pane) = self.focus {
-                    let result = self.panes.split(
-                        axis,
-                        &pane,
-                        Pane::new(self.panes_created),
-                    );
-
-                    if let Some((pane, _)) = result {
-                        self.focus = Some(pane);
-                    }
-
-                    self.panes_created += 1;
-                }
-            }
-            Message::FocusAdjacent(direction) => {
-                if let Some(pane) = self.focus {
-                    if let Some(adjacent) = self.panes.adjacent(&pane, direction)
-                    {
-                        self.focus = Some(adjacent);
-                    }
-                }
-            }
+            },
             Message::Clicked(pane) => {
                 if let Some(pane_id) = &self.focus {
                     let focused_pane = self.panes.get(pane_id).unwrap();
-                    let prev_focused_tab = self.tabs.get_mut(&(focused_pane.id as u64)).unwrap();
+                    let prev_focused_tab =
+                        self.tabs.get_mut(&(focused_pane.id as u64)).unwrap();
                     prev_focused_tab.update(iced_term::Command::LostFocus);
                 }
 
                 let new_focused_pane = self.panes.get(&pane).unwrap();
-                let new_focused_tab = self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
+                let new_focused_tab =
+                    self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
                 new_focused_tab.update(iced_term::Command::Focus);
 
                 self.focus = Some(pane);
-            }
+            },
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
-                println!("{:?}, {}", split, ratio);
-                // self.panes.iter().for_each(|p| {
-                //     // p.0.
-                // });
-                // self.panes
                 self.panes.resize(&split, ratio);
-            }
-            Message::Dragged(pane_grid::DragEvent::Dropped {
-                pane,
-                target,
-            }) => {
-                self.panes.drop(&pane, target);
-            }
-            Message::Dragged(_) => {}
-            Message::TogglePin(pane) => {
-                if let Some(Pane { is_pinned, .. }) = self.panes.get_mut(&pane) {
-                    *is_pinned = !*is_pinned;
-                }
-            }
-            Message::Maximize(pane) => self.panes.maximize(&pane),
-            Message::Restore => {
-                self.panes.restore();
-            }
+            },
             Message::Close(pane) => {
-                if let Some((_, sibling)) = self.panes.close(&pane) {
+                if let Some((clsoed_pane, sibling)) = self.panes.close(&pane) {
+                    let tab_id = clsoed_pane.id as u64;
+                    self.tabs.remove(&tab_id);
                     self.focus = Some(sibling);
                 }
-            }
-            Message::CloseFocused => {
-                if let Some(pane) = self.focus {
-                    if let Some(Pane { is_pinned, .. }) = self.panes.get(&pane) {
-                        if !is_pinned {
-                            if let Some((_, sibling)) = self.panes.close(&pane) {
-                                self.focus = Some(sibling);
-                            }
-                        }
-                    }
-                }
             },
-            Message::TermMessage(m) => {
+            Message::TermEvent(m) => {
                 match m {
-                    Event::InputReceived(id, c) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
+                    iced_term::Event::InputReceived(id, c) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
                         tab.update(iced_term::Command::WriteToPTY(c))
                     },
-                    Event::DataUpdated(id, data) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
+                    iced_term::Event::DataUpdated(id, data) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
                         tab.update(iced_term::Command::RenderData(data))
                     },
-                    Event::ContainerScrolled(id, delta) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
-                        tab.update(iced_term::Command::Scroll(delta.1 as i32))
-                    }
-                    Event::Resized(id, size) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
+                    iced_term::Event::ContainerScrolled(id, delta) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
+                        tab.update(iced_term::Command::Scroll(delta as i32))
+                    },
+                    iced_term::Event::Resized(id, size) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
                         tab.update(iced_term::Command::Resize(size));
-                    }
-                    _ => {}
-                    _ => {}
+                    },
+                    _ => {},
                 };
             },
         }
@@ -203,8 +168,7 @@ impl Application for Example {
         let mut sb = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            let sub = iced_term::data_received_subscription(id.clone(), tab.pty_data_reader())
-                .map(|e| Message::TermMessage(e));
+            let sub = tab.data_subscription().map(Message::TermEvent);
 
             sb.push(sub)
         }
@@ -216,17 +180,9 @@ impl Application for Example {
         let focus = self.focus;
         let total_panes = self.panes.len();
 
-        let pane_grid = PaneGrid::new(&self.panes, |id, pane, is_maximized| {
+        let pane_grid = PaneGrid::new(&self.panes, |id, pane, _| {
             let is_focused = focus == Some(id);
-
-            let pin_button = button(
-                text(if pane.is_pinned { "Unpin" } else { "Pin" }).size(14),
-            )
-            .on_press(Message::TogglePin(id))
-            .padding(3);
-
             let title = row![
-                pin_button,
                 "Pane",
                 text(pane.id.to_string()).style(if is_focused {
                     PANE_ID_COLOR_FOCUSED
@@ -237,12 +193,7 @@ impl Application for Example {
             .spacing(5);
 
             let title_bar = pane_grid::TitleBar::new(title)
-                .controls(view_controls(
-                    id,
-                    total_panes,
-                    pane.is_pinned,
-                    is_maximized,
-                ))
+                .controls(view_controls(id, total_panes, pane.is_pinned))
                 .padding(10)
                 .style(if is_focused {
                     style::title_bar_focused
@@ -250,10 +201,9 @@ impl Application for Example {
                     style::title_bar_active
                 });
 
-            let pane_id = pane.id.clone() as u64;
-            // let tab = self.tabs.get(&pane_id).expect("tab with target id not found");
-            pane_grid::Content::new(responsive(move |size| {
-                view_content(id, pane_id, &self.tabs, total_panes, pane.is_pinned, size)
+            let pane_id = pane.id as u64;
+            pane_grid::Content::new(responsive(move |_| {
+                view_content(pane_id, &self.tabs)
             }))
             .title_bar(title_bar)
             .style(if is_focused {
@@ -266,7 +216,6 @@ impl Application for Example {
         .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
-        .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
         container(pane_grid)
@@ -303,18 +252,12 @@ impl Pane {
     }
 }
 
-fn view_content<'a>(
-    pane: pane_grid::Pane,
-    // tab: &'a Term,
+fn view_content(
     pane_id: u64,
-    tabs: &'a HashMap<u64, Term>,
-    total_panes: usize,
-    is_pinned: bool,
-    size: Size,
-) -> Element<'a, Message> {
+    tabs: &HashMap<u64, iced_term::Term>,
+) -> Element<'_, Message> {
     let tab = tabs.get(&pane_id).expect("tab with target id not found");
-    let tab_view = tab.view()
-        .map(move |e| Message::TermMessage(e));
+    let tab_view = tab.view().map(Message::TermEvent);
 
     container(tab_view)
         .width(Length::Fill)
@@ -327,26 +270,8 @@ fn view_controls<'a>(
     pane: pane_grid::Pane,
     total_panes: usize,
     is_pinned: bool,
-    is_maximized: bool,
 ) -> Element<'a, Message> {
     let mut row = row![].spacing(5);
-
-    if total_panes > 1 {
-        let toggle = {
-            let (content, message) = if is_maximized {
-                ("Restore", Message::Restore)
-            } else {
-                ("Maximize", Message::Maximize(pane))
-            };
-            button(text(content).size(14))
-                .style(theme::Button::Secondary)
-                .padding(3)
-                .on_press(message)
-        };
-
-        row = row.push(toggle);
-    }
-
     let mut close = button(text("Close").size(14))
         .style(theme::Button::Destructive)
         .padding(3);
@@ -367,19 +292,15 @@ fn view_controls<'a>(
         .on_press(message)
     };
 
-    row = row.push(
-        button(
-            "Split horizontally",
-            Message::Split(pane_grid::Axis::Horizontal, pane),
-        )
-    );
+    row = row.push(button(
+        "Split horizontally",
+        Message::Split(pane_grid::Axis::Horizontal, pane),
+    ));
 
-    row = row.push(
-        button(
-            "Split vertically",
-            Message::Split(pane_grid::Axis::Vertical, pane),
-        )
-    );
+    row = row.push(button(
+        "Split vertically",
+        Message::Split(pane_grid::Axis::Vertical, pane),
+    ));
 
     row.push(close).into()
 }

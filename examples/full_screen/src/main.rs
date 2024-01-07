@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use iced::advanced::graphics::core::Element;
 use iced::widget::container;
 use iced::{
-    executor, window, Command, Length,
-    Settings, Theme, Application, Subscription,
+    executor, window, Application, Command, Length, Settings, Subscription,
+    Theme,
 };
-use iced_term::{self, Event, Term};
+use iced_term::{self, BackendSettings, FontSettings, Term, TermSettings};
+use std::collections::HashMap;
 
 fn main() -> iced::Result {
     App::run(Settings {
@@ -20,8 +20,7 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    TermMessage(Event),
-    GlobalEvent(iced::Event),
+    TermEvent(iced_term::Event),
 }
 
 struct App {
@@ -33,18 +32,24 @@ impl Application for App {
     type Theme = Theme;
     type Executor = executor::Default;
     type Flags = ();
-    
+
     fn new(_flags: ()) -> (Self, Command<Message>) {
+        let system_shell = env!("SHELL");
         let tab_id = 0;
-        let tab = iced_term::Term::new(tab_id, 10.0);
+        let tab = iced_term::Term::new(
+            tab_id,
+            TermSettings {
+                font: FontSettings { size: 14.0 },
+                backend: BackendSettings {
+                    shell: system_shell.to_string(),
+                    ..BackendSettings::default()
+                },
+            },
+        );
         let mut tabs = HashMap::new();
         tabs.insert(tab_id, tab);
-        (
-            Self { tabs },
-            Command::none(),
-        )
+        (Self { tabs }, Command::none())
     }
-
 
     fn title(&self) -> String {
         String::from("Terminal app")
@@ -52,45 +57,41 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Message> {
         match message {
-            Message::TermMessage(m) => {
-                // println!("{:?}",m);
-                match m {
-                    Event::InputReceived(id, c) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
+            Message::TermEvent(event) => {
+                match event {
+                    iced_term::Event::InputReceived(id, c) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
                         tab.update(iced_term::Command::WriteToPTY(c))
                     },
-                    Event::DataUpdated(id, data) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
+                    iced_term::Event::DataUpdated(id, data) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
                         tab.update(iced_term::Command::RenderData(data))
                     },
-                    Event::ContainerScrolled(id, delta) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
-                        tab.update(iced_term::Command::Scroll(delta.1 as i32))
-                    }
-                    Event::Resized(id, (width, height)) => {
-                        let tab = self.tabs.get_mut(&id).expect("tab with target id not found");
-                        tab.update(iced_term::Command::Resize(width as u32, height as u32));
-                    }
-                    _ => {}
+                    iced_term::Event::ContainerScrolled(id, delta) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
+                        tab.update(iced_term::Command::Scroll(delta as i32))
+                    },
+                    iced_term::Event::Resized(id, size) => {
+                        let tab = self
+                            .tabs
+                            .get_mut(&id)
+                            .expect("tab with target id not found");
+                        tab.update(iced_term::Command::Resize(size));
+                    },
+                    _ => {},
                 };
 
                 Command::none()
             },
-            Message::GlobalEvent(e) => {
-                // match e {
-                //     iced::Event::Window(window_event) => match window_event {
-                //         iced::window::Event::Resized { width, height } => {
-                //             self.tabs.iter_mut().for_each(|(id, tab)| {
-                //                 tab.update(iced_term::Command::Resize(width, height));
-                //             });
-                //         }
-                //         _ => {},
-                //     },
-                //     _ => {}
-                // }
-
-                Command::none()
-            }
         }
     }
 
@@ -98,41 +99,26 @@ impl Application for App {
         let mut sb = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            let sub = iced_term::data_received_subscription(
-                id.clone(),
-                tab.pty_data_reader()
-            )
-                .map(|e| Message::TermMessage(e));
+            let sub = tab.data_subscription().map(Message::TermEvent);
 
             sb.push(sub)
         }
-
-        let global_event_sub = iced::subscription::events()
-            .map(|e| Message::GlobalEvent(e));
-        sb.push(global_event_sub);
 
         Subscription::batch(sb)
     }
 
     fn view(&self) -> Element<Message, iced::Renderer> {
         let tab_id = 0;
-        let tab = self.tabs.get(&tab_id).expect("tab with target id not found");
+        let tab = self
+            .tabs
+            .get(&tab_id)
+            .expect("tab with target id not found");
 
-        let view = tab.view2().map(move |e| Message::TermMessage(e));
+        let tab_view = tab.view().map(Message::TermEvent);
 
-        // let tab_view: Element<Message> = tab.into().map();
-        container(view)
+        container(tab_view)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
-
-        
-        // let tab_view = tab.view()
-        //     .map(move |e| Message::TermMessage(e));
-
-        // container(tab_view)
-        //     .width(Length::Fill)
-        //     .height(Length::Fill)
-        //     .into()
     }
 }

@@ -1,18 +1,18 @@
-use std::fs::File;
-use std::io::Write;
-use std::io::Result;
+use crate::backend::BackendSettings;
+use crate::backend::RenderableCell;
+use alacritty_terminal::event::{EventListener, OnResize, WindowSize};
 use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::term::{cell, test::TermSize};
 use alacritty_terminal::tty::EventedReadWrite;
 use alacritty_terminal::vte::ansi;
-use alacritty_terminal::event::{EventListener, OnResize, WindowSize};
-use alacritty_terminal::term::{test::TermSize, cell};
+use std::fs::File;
+use std::io::Result;
+use std::io::Write;
 use tokio::io::AsyncReadExt;
 use tokio::time::sleep;
-use crate::backend::RenderableCell;
-use crate::backend::BackendSettings;
 
 pub struct Pty {
-    id: u64,
+    _id: u64,
     pty: alacritty_terminal::tty::Pty,
     term: alacritty_terminal::Term<EventProxy>,
     reader: File,
@@ -21,8 +21,13 @@ pub struct Pty {
 
 impl Pty {
     pub fn new(id: u64, settings: BackendSettings) -> Result<Self> {
-        let mut pty_config = alacritty_terminal::tty::Options::default();
-        pty_config.shell = Some(alacritty_terminal::tty::Shell::new(settings.shell, vec![]));
+        let pty_config = alacritty_terminal::tty::Options {
+            shell: Some(alacritty_terminal::tty::Shell::new(
+                settings.shell,
+                vec![],
+            )),
+            ..alacritty_terminal::tty::Options::default()
+        };
         let config = alacritty_terminal::term::Config::default();
         let window_size = alacritty_terminal::event::WindowSize {
             cell_width: 13,
@@ -31,31 +36,33 @@ impl Pty {
             num_lines: settings.rows,
         };
 
-        let mut pty = alacritty_terminal::tty::new(&pty_config, window_size, id)?;
-        let term_size = TermSize::new(settings.cols as usize, settings.rows as usize);
+        let mut pty =
+            alacritty_terminal::tty::new(&pty_config, window_size, id)?;
+        let term_size =
+            TermSize::new(settings.cols as usize, settings.rows as usize);
         let reader = pty.reader().try_clone()?;
 
         Ok(Self {
-            id,
+            _id: id,
             pty,
             reader,
-            term: alacritty_terminal::Term::new(config, &term_size, EventProxy {}),
-            parser: ansi::Processor::new()
+            term: alacritty_terminal::Term::new(
+                config,
+                &term_size,
+                EventProxy {},
+            ),
+            parser: ansi::Processor::new(),
         })
-    }
-
-    pub fn id(&self) -> u64 {
-        self.id
     }
 
     pub async fn read(reader: &File) -> Option<Vec<u8>> {
         let mut file = tokio::fs::File::from(reader.try_clone().unwrap());
         let mut buf = Vec::new();
-        if let Ok(_) = file.read_buf(&mut buf).await {
-            return Some(buf)
+        if (file.read_buf(&mut buf).await).is_ok() {
+            return Some(buf);
         };
 
-        if buf.len() == 0 {
+        if buf.is_empty() {
             sleep(std::time::Duration::from_millis(1)).await;
         }
 
@@ -64,20 +71,11 @@ impl Pty {
 
     pub fn resize(
         &mut self,
-        // container_width: u32,
-        // container_height: u32,
-        // padding: u16,
         rows: u16,
         cols: u16,
         font_width: f32,
         font_height: f32,
     ) -> Vec<RenderableCell> {
-        // let container_padding = padding.saturating_mul(2);
-        // let container_width = container_width.saturating_sub(container_padding as u32).max(1);
-        // let container_height = container_height.saturating_sub(container_padding as u32).max(1);
-
-        // let rows = (container_height as f32 / font_height).floor() as u16;
-        // let cols = (container_width as f32 / font_width).floor() as u16;
         if rows > 0 && cols > 0 {
             let size = WindowSize {
                 cell_width: font_width as u16,
@@ -129,15 +127,8 @@ impl Pty {
             let mut fg = cell.fg;
             let mut bg = cell.bg;
 
-
-            // if cell.flags.contains(cell::Flags::DIM) || cell.flags.contains(cell::Flags::DIM_BOLD) {
-            //     fg = ansi::Color::(fg.r(), fg.g(), fg.b(), 66);
-            // }
-
             if cell.flags.contains(cell::Flags::INVERSE) {
-                let clone_fg = fg.clone();
-                fg = bg;
-                bg = clone_fg;
+                std::mem::swap(&mut fg, &mut bg);
             }
 
             res.push(RenderableCell {

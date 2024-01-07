@@ -1,22 +1,23 @@
-use std::fs::File;
+use crate::backend::{BackendSettings, Pty, RenderableCell};
+use crate::{font, FontSettings};
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{canvas, container};
-use iced::{Element, Font, Length, Point, Rectangle, Size, Theme, Color, Subscription};
 use iced::mouse::{Cursor, ScrollDelta};
-use iced::widget::canvas::{Cache, Geometry, Path, Text};
-use iced_graphics::core::Widget;
+use iced::widget::canvas::{Cache, Path, Text};
+use iced::widget::container;
+use iced::{
+    Color, Element, Font, Length, Point, Rectangle, Size, Subscription, Theme,
+};
 use iced_graphics::core::widget::Tree;
+use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
-use crate::font;
-use crate::backend::{Pty, RenderableCell, BackendSettings};
 
 #[derive(Debug, Clone)]
 pub enum Event {
     DataUpdated(u64, Vec<u8>),
     InputReceived(u64, char),
-    ContainerScrolled(u64, (f32, f32)),
+    ContainerScrolled(u64, f32),
     Resized(u64, Size<f32>),
-    Ignored(u64)
+    Ignored(u64),
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +28,12 @@ pub enum Command {
     RenderData(Vec<u8>),
     Scroll(i32),
     Resize(Size<f32>),
+}
+
+#[derive(Default, Clone)]
+pub struct TermSettings {
+    pub font: FontSettings,
+    pub backend: BackendSettings,
 }
 
 pub struct Term {
@@ -41,28 +48,21 @@ pub struct Term {
     size: Size<f32>,
 }
 
-
-pub fn data_received_subscription(id: u64, reader: File) -> Subscription<Event> {
-    iced::subscription::unfold(format!("iced_term_{}", id), reader, move |reader| async move {
-        match Pty::read(&reader).await {
-            Some(data) => (Event::DataUpdated(id, data), reader),
-            None => (Event::Ignored(id), reader)
-        }
-    })
-}
-
 impl Term {
-    pub fn new(id: u64, font_size: f32) -> Self {
+    pub fn new(id: u64, settings: TermSettings) -> Self {
         Self {
             id,
-            font_size,
-            font_measure: font::font_measure(font_size),
+            font_size: settings.font.size,
+            font_measure: font::font_measure(settings.font.size),
             padding: 0,
             is_focused: true,
             renderable_content: vec![],
             cache: Cache::default(),
-            backend: Pty::new(id, BackendSettings::default()).unwrap(),
-            size: Size { width: 0.0, height: 0.0 },
+            backend: Pty::new(id, settings.backend).unwrap(),
+            size: Size {
+                width: 0.0,
+                height: 0.0,
+            },
         }
     }
 
@@ -70,27 +70,24 @@ impl Term {
         self.id
     }
 
-    pub fn pty_data_reader(&self) -> File {
-        self.backend.reader()
-    }
-
-    pub fn font_size(&self) -> f32 {
-        self.font_size
-    }
-
-    pub fn font_measure(&self) -> Size<f32> {
-        self.font_measure
-    }
-
-    pub fn inner_padding(&self) -> u16 {
-        self.padding
+    pub fn data_subscription(&self) -> Subscription<Event> {
+        iced::subscription::unfold(
+            format!("iced_term_{}", self.id),
+            (self.id, self.backend.reader()),
+            move |(id, reader)| async move {
+                match Pty::read(&reader).await {
+                    Some(data) => (Event::DataUpdated(id, data), (id, reader)),
+                    None => (Event::Ignored(id), (id, reader)),
+                }
+            },
+        )
     }
 
     pub fn update(&mut self, cmd: Command) {
         match cmd {
             Command::Focus => {
                 self.is_focused = true;
-            }
+            },
             Command::LostFocus => {
                 self.is_focused = false;
             },
@@ -108,11 +105,15 @@ impl Term {
                 self.cache.clear();
             },
             Command::Resize(size) => {
-                let container_padding = f32::from(self.padding.saturating_mul(2));
+                let container_padding =
+                    f32::from(self.padding.saturating_mul(2));
                 let container_width = (size.width - container_padding).max(1.0);
-                let container_height = (size.height - container_padding).max(1.0);;
-                let rows = (container_height / self.font_measure.height).floor() as u16;
-                let cols = (container_width / self.font_measure.width).floor() as u16;
+                let container_height =
+                    (size.height - container_padding).max(1.0);
+                let rows = (container_height / self.font_measure.height).floor()
+                    as u16;
+                let cols =
+                    (container_width / self.font_measure.width).floor() as u16;
                 let content = self.backend.resize(
                     rows,
                     cols,
@@ -122,7 +123,7 @@ impl Term {
                 self.renderable_content = content;
                 self.cache.clear();
                 self.size = size;
-            }
+            },
         }
     }
 
@@ -134,6 +135,24 @@ impl Term {
             .style(iced::theme::Container::Custom(Box::new(Style)))
             .into()
     }
+
+    fn handle_mouse_event(&self, event: iced::mouse::Event) -> Event {
+        match event {
+            iced::mouse::Event::WheelScrolled {
+                delta: ScrollDelta::Lines { x: _, y },
+            } => Event::ContainerScrolled(self.id, y),
+            _ => Event::Ignored(self.id),
+        }
+    }
+
+    fn handle_keyboard_event(&self, event: iced::keyboard::Event) -> Event {
+        match event {
+            iced::keyboard::Event::CharacterReceived(c) => {
+                Event::InputReceived(self.id, c)
+            },
+            _ => Event::Ignored(self.id),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -144,101 +163,13 @@ impl container::StyleSheet for Style {
 
     fn appearance(&self, _style: &Self::Style) -> container::Appearance {
         container::Appearance {
-            background: Some(Color::from_rgb8(40, 39, 39).into()), // Set the background color here
+            background: Some(Color::from_rgb8(40, 39, 39).into()),
             ..container::Appearance::default()
-        }   
-    }
-}
-
-
-impl canvas::Program<Event> for Term
-{
-    type State = ();
-
-    fn update(
-        &self,
-        _state: &mut Self::State,
-        event: canvas::Event,
-        _bounds: Rectangle,
-        _cursor: iced::mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Event>) {
-        if self.is_focused {
-            return match event {
-                canvas::Event::Keyboard(e) => match e {
-                    iced::keyboard::Event::CharacterReceived(c) => (canvas::event::Status::Captured, Some(Event::InputReceived(self.id(), c))),
-                    _ => (canvas::event::Status::Ignored, None)
-                }
-                canvas::Event::Mouse(e) => match e {
-                    iced::mouse::Event::WheelScrolled { delta } => {
-                        if let ScrollDelta::Lines{ x, y } = delta {
-                            return (canvas::event::Status::Captured, Some(Event::ContainerScrolled(self.id(), (x, y))))
-                        }
-
-                        (canvas::event::Status::Ignored, None)
-                    },
-                    _ => (canvas::event::Status::Ignored, None)
-                }
-                _ => (canvas::event::Status::Ignored, None)
-            }
         }
-
-        (canvas::event::Status::Ignored, None)
-    }
-
-    fn draw(
-        &self,
-        _state: &Self::State,
-        renderer: &iced::Renderer,
-        _theme: &Theme,
-        bounds: Rectangle,
-        _cursor: Cursor,
-    ) -> Vec<Geometry> {
-        let geom = self.cache.draw(renderer, bounds.size(), |frame| {
-            for cell in &self.renderable_content {
-                let cell_width = self.font_measure.width as f64;
-                let cell_height = self.font_measure.height as f64;
-                
-                let x = cell.column as f64 * cell_width as f64;
-                let y = (cell.line as f64 + cell.display_offset as f64) * cell_height as f64;
-                let fg = font::get_color(cell.fg);
-                let bg = font::get_color(cell.bg);
-
-                let size = Size::new(cell_width as f32, cell_height as f32);
-                let background = Path::rectangle(
-                    Point {
-                        x: x as f32,
-                        y: y as f32,
-                    },
-                    size,
-                );
-                frame.fill(&background, bg);
-
-                if cell.content != ' ' && cell.content != '\t' {
-                    let text = Text {
-                        content: cell.content.to_string(),
-                        position: Point {
-                            x: x as f32 + size.width / 2.0,
-                            y: y as f32 + size.height / 2.0,
-                        },
-                        font: Font::default(),
-                        size: self.font_size,
-                        color: fg,
-                        horizontal_alignment: Horizontal::Center,
-                        vertical_alignment: Vertical::Center,
-                        ..Text::default()
-                    };
-
-                    frame.fill_text(text);
-                }
-            }
-        });
-
-        vec![geom]
     }
 }
 
-impl Widget<Event, iced::Renderer<Theme>> for &Term
-{
+impl Widget<Event, iced::Renderer<Theme>> for &Term {
     fn width(&self) -> Length {
         Length::Fill
     }
@@ -274,32 +205,28 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term
         if self.size != _layout.bounds().size() {
             _shell.publish(Event::Resized(self.id(), _layout.bounds().size()));
         }
-        
-        if self.is_focused {
-            return match event {
-                iced::Event::Keyboard(e) => match e {
-                    iced::keyboard::Event::CharacterReceived(c) => {
-                        _shell.publish(Event::InputReceived(self.id(), c));
-                        canvas::event::Status::Captured
-                    },
-                    _ => canvas::event::Status::Captured
-                }
-                iced::Event::Mouse(e) => match e {
-                    iced::mouse::Event::WheelScrolled { delta } => {
-                        if let ScrollDelta::Lines{ x, y } = delta {
-                            _shell.publish(Event::ContainerScrolled(self.id(), (x, y)));
-                            return iced::event::Status::Ignored
-                        }
 
-                        iced::event::Status::Ignored
-                    },
-                    _ => iced::event::Status::Ignored
-                }
-                _ => iced::event::Status::Ignored
-            }
+        if !self.is_focused {
+            return iced::event::Status::Ignored;
         }
 
-        iced::event::Status::Ignored
+        let term_event = match event {
+            iced::Event::Mouse(mouse_event) => {
+                self.handle_mouse_event(mouse_event)
+            },
+            iced::Event::Keyboard(keyboard_event) => {
+                self.handle_keyboard_event(keyboard_event)
+            },
+            _ => Event::Ignored(self.id),
+        };
+
+        match term_event {
+            Event::Ignored(_) => iced::event::Status::Ignored,
+            e => {
+                _shell.publish(e);
+                iced::event::Status::Captured
+            },
+        }
     }
 
     fn draw(
@@ -316,9 +243,10 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term
             for cell in &self.renderable_content {
                 let cell_width = self.font_measure.width as f64;
                 let cell_height = self.font_measure.height as f64;
-                
-                let x = cell.column as f64 * cell_width as f64;
-                let y = (cell.line as f64 + cell.display_offset as f64) * cell_height as f64;
+
+                let x = cell.column as f64 * cell_width;
+                let y = (cell.line as f64 + cell.display_offset as f64)
+                    * cell_height;
                 let fg = font::get_color(cell.fg);
                 let bg = font::get_color(cell.bg);
 
@@ -336,8 +264,12 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term
                     let text = Text {
                         content: cell.content.to_string(),
                         position: Point {
-                            x: _layout.position().x + x as f32 + size.width / 2.0,
-                            y:  _layout.position().y + y as f32 + size.height / 2.0,
+                            x: _layout.position().x
+                                + x as f32
+                                + size.width / 2.0,
+                            y: _layout.position().y
+                                + y as f32
+                                + size.height / 2.0,
                         },
                         font: Font::default(),
                         size: self.font_size,
@@ -356,8 +288,7 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term
     }
 }
 
-impl<'a> From<&'a Term> for Element<'a, Event, iced::Renderer<Theme>>
-{
+impl<'a> From<&'a Term> for Element<'a, Event, iced::Renderer<Theme>> {
     fn from(widget: &'a Term) -> Self {
         Self::new(widget)
     }
