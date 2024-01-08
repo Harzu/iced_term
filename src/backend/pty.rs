@@ -6,10 +6,8 @@ use alacritty_terminal::term::{cell, test::TermSize};
 use alacritty_terminal::tty::EventedReadWrite;
 use alacritty_terminal::vte::ansi;
 use std::fs::File;
-use std::io::Result;
+use std::io::{Read, Result};
 use std::io::Write;
-use tokio::io::AsyncReadExt;
-use tokio::time::sleep;
 
 pub struct Pty {
     _id: u64,
@@ -30,8 +28,8 @@ impl Pty {
         };
         let config = alacritty_terminal::term::Config::default();
         let window_size = alacritty_terminal::event::WindowSize {
-            cell_width: 13,
-            cell_height: 20,
+            cell_width: 1,
+            cell_height: 1,
             num_cols: settings.cols,
             num_lines: settings.rows,
         };
@@ -41,32 +39,26 @@ impl Pty {
         let term_size =
             TermSize::new(settings.cols as usize, settings.rows as usize);
         let reader = pty.reader().try_clone()?;
+        let term = alacritty_terminal::Term::new(
+            config,
+            &term_size,
+            EventProxy {},
+        );
 
         Ok(Self {
             _id: id,
             pty,
             reader,
-            term: alacritty_terminal::Term::new(
-                config,
-                &term_size,
-                EventProxy {},
-            ),
+            term,
             parser: ansi::Processor::new(),
         })
     }
 
-    pub async fn read(reader: &File) -> Option<Vec<u8>> {
-        let mut file = tokio::fs::File::from(reader.try_clone().unwrap());
-        let mut buf = Vec::new();
-        if (file.read_buf(&mut buf).await).is_ok() {
-            return Some(buf);
-        };
-
-        if buf.is_empty() {
-            sleep(std::time::Duration::from_millis(1)).await;
+    pub fn read(reader: &File, buf: &mut [u8]) -> Option<Vec<u8>> {
+        match reader.try_clone().unwrap().read(buf) {
+            Ok(n) => Some(buf[..n].to_vec()),
+            Err(e) => None
         }
-
-        None
     }
 
     pub fn resize(
@@ -151,5 +143,7 @@ struct EventProxy;
 impl EventProxy {}
 
 impl EventListener for EventProxy {
-    fn send_event(&self, _: alacritty_terminal::event::Event) {}
+    fn send_event(&self, e: alacritty_terminal::event::Event) {
+        println!("{:?}", e);
+    }
 }

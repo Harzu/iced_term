@@ -28,9 +28,9 @@ struct App {
 }
 
 impl Application for App {
+    type Executor = executor::Default;
     type Message = Message;
     type Theme = Theme;
-    type Executor = executor::Default;
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
@@ -95,18 +95,6 @@ impl Application for App {
         }
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        let mut sb = vec![];
-        for id in self.tabs.keys() {
-            let tab = self.tabs.get(id).unwrap();
-            let sub = tab.data_subscription().map(Message::TermEvent);
-
-            sb.push(sub)
-        }
-
-        Subscription::batch(sb)
-    }
-
     fn view(&self) -> Element<Message, iced::Renderer> {
         let tab_id = 0;
         let tab = self
@@ -120,5 +108,17 @@ impl Application for App {
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        let mut sb = vec![];
+        for id in self.tabs.keys() {
+            let tab = self.tabs.get(id).unwrap();
+            let sub = tab.data_subscription().map(Message::TermEvent);
+
+            sb.push(sub)
+        }
+
+        Subscription::batch(sb)
     }
 }

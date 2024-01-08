@@ -14,6 +14,7 @@ use iced_graphics::geometry::Renderer;
 #[derive(Debug, Clone)]
 pub enum Event {
     DataUpdated(u64, Vec<u8>),
+    DataUpdated2(u64, Vec<RenderableCell>),
     InputReceived(u64, char),
     ContainerScrolled(u64, f32),
     Resized(u64, Size<f32>),
@@ -26,6 +27,7 @@ pub enum Command {
     LostFocus,
     WriteToPTY(char),
     RenderData(Vec<u8>),
+    RenderData2(Vec<RenderableCell>),
     Scroll(i32),
     Resize(Size<f32>),
 }
@@ -50,6 +52,9 @@ pub struct Term {
 
 impl Term {
     pub fn new(id: u64, settings: TermSettings) -> Self {
+        let backend = Pty::new(id, settings.backend).unwrap();
+        // let read_data = backend.run();
+
         Self {
             id,
             font_size: settings.font.size,
@@ -58,7 +63,7 @@ impl Term {
             is_focused: true,
             renderable_content: vec![],
             cache: Cache::default(),
-            backend: Pty::new(id, settings.backend).unwrap(),
+            backend,
             size: Size {
                 width: 0.0,
                 height: 0.0,
@@ -71,14 +76,30 @@ impl Term {
     }
 
     pub fn data_subscription(&self) -> Subscription<Event> {
+        let poller = polling::Poller::new().unwrap();
+        unsafe {
+            poller.add(&self.backend.reader(), polling::Event::readable(self.id as usize)).unwrap();
+        }
+
         iced::subscription::unfold(
             format!("iced_term_{}", self.id),
-            (self.id, self.backend.reader()),
-            move |(id, reader)| async move {
-                match Pty::read(&reader).await {
-                    Some(data) => (Event::DataUpdated(id, data), (id, reader)),
-                    None => (Event::Ignored(id), (id, reader)),
+            (self.id, poller, self.backend.reader()),
+            move |(id, poller, reader)| async move {
+                let mut events = polling::Events::new();
+                poller.wait(&mut events, None).unwrap();
+
+                for event in events.iter() {
+                    println!("{:?}", event);
+                    if event.readable {
+                        let mut buf = [0u8; 0x10000];
+                        if let Some(data) = Pty::read(&reader, &mut buf) {
+                            poller.modify(&reader, polling::Event::readable(id as usize)).unwrap();
+                            return (Event::DataUpdated(id, data), (id, poller, reader))
+                        }
+                    }
                 }
+
+                (Event::Ignored(id), (id, poller, reader))
             },
         )
     }
@@ -124,6 +145,7 @@ impl Term {
                 self.cache.clear();
                 self.size = size;
             },
+            _ => {}
         }
     }
 
@@ -191,12 +213,70 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         iced::advanced::layout::Node::new(size)
     }
 
+    fn draw(
+        &self,
+        _state: &Tree,
+        renderer: &mut iced::Renderer<Theme>,
+        _theme: &Theme,
+        _style: &iced::advanced::renderer::Style,
+        layout: iced::advanced::Layout,
+        _cursor: Cursor,
+        viewport: &Rectangle,
+    ) {
+        let geom = self.cache.draw(renderer, viewport.size(), |frame| {
+            for cell in &self.renderable_content {
+                let cell_width = self.font_measure.width as f64;
+                let cell_height = self.font_measure.height as f64;
+
+                let x = cell.column as f64 * cell_width;
+                let y = (cell.line as f64 + cell.display_offset as f64)
+                    * cell_height;
+                let fg = font::get_color(cell.fg);
+                let bg = font::get_color(cell.bg);
+
+                let size = Size::new(cell_width as f32, cell_height as f32);
+                let background = Path::rectangle(
+                    Point {
+                        x: x as f32 + layout.position().x,
+                        y: y as f32 + layout.position().y,
+                    },
+                    size,
+                );
+                frame.fill(&background, bg);
+
+                if cell.content != ' ' && cell.content != '\t' {
+                    let text = Text {
+                        content: cell.content.to_string(),
+                        position: Point {
+                            x: layout.position().x
+                                + x as f32
+                                + size.width / 2.0,
+                            y: layout.position().y
+                                + y as f32
+                                + size.height / 2.0,
+                        },
+                        font: Font::default(),
+                        size: self.font_size,
+                        color: fg,
+                        horizontal_alignment: Horizontal::Center,
+                        vertical_alignment: Vertical::Center,
+                        ..Text::default()
+                    };
+
+                    frame.fill_text(text);
+                }
+            }
+        });
+
+        renderer.draw(vec![geom]);
+    }
+
     fn on_event(
         &mut self,
         _state: &mut Tree,
         event: iced::Event,
         _layout: iced_graphics::core::Layout<'_>,
-        _cursor: iced_graphics::core::mouse::Cursor,
+        _cursor: Cursor,
         _renderer: &iced::Renderer<Theme>,
         _clipboard: &mut dyn iced_graphics::core::Clipboard,
         _shell: &mut iced_graphics::core::Shell<'_, Event>,
@@ -227,64 +307,6 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
                 iced::event::Status::Captured
             },
         }
-    }
-
-    fn draw(
-        &self,
-        _state: &iced::advanced::widget::Tree,
-        renderer: &mut iced::Renderer<Theme>,
-        _theme: &Theme,
-        _style: &iced::advanced::renderer::Style,
-        _layout: iced::advanced::Layout,
-        _cursor: Cursor,
-        viewport: &Rectangle,
-    ) {
-        let geom = self.cache.draw(renderer, viewport.size(), |frame| {
-            for cell in &self.renderable_content {
-                let cell_width = self.font_measure.width as f64;
-                let cell_height = self.font_measure.height as f64;
-
-                let x = cell.column as f64 * cell_width;
-                let y = (cell.line as f64 + cell.display_offset as f64)
-                    * cell_height;
-                let fg = font::get_color(cell.fg);
-                let bg = font::get_color(cell.bg);
-
-                let size = Size::new(cell_width as f32, cell_height as f32);
-                let background = Path::rectangle(
-                    Point {
-                        x: x as f32 + _layout.position().x,
-                        y: y as f32 + _layout.position().y,
-                    },
-                    size,
-                );
-                frame.fill(&background, bg);
-
-                if cell.content != ' ' && cell.content != '\t' {
-                    let text = Text {
-                        content: cell.content.to_string(),
-                        position: Point {
-                            x: _layout.position().x
-                                + x as f32
-                                + size.width / 2.0,
-                            y: _layout.position().y
-                                + y as f32
-                                + size.height / 2.0,
-                        },
-                        font: Font::default(),
-                        size: self.font_size,
-                        color: fg,
-                        horizontal_alignment: Horizontal::Center,
-                        vertical_alignment: Vertical::Center,
-                        ..Text::default()
-                    };
-
-                    frame.fill_text(text);
-                }
-            }
-        });
-
-        renderer.draw(vec![geom]);
     }
 }
 
