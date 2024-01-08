@@ -21,6 +21,7 @@ fn main() -> iced::Result {
 #[derive(Debug, Clone)]
 pub enum Message {
     TermEvent(iced_term::Event),
+    GlobalEvents(iced::event::Event),
 }
 
 struct App {
@@ -92,6 +93,10 @@ impl Application for App {
 
                 Command::none()
             },
+            Message::GlobalEvents(e) => {
+                println!("{:?}", e);
+                Command::none()
+            },
         }
     }
 
@@ -111,14 +116,19 @@ impl Application for App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let mut sb = vec![];
-        for id in self.tabs.keys() {
-            let tab = self.tabs.get(id).unwrap();
-            let sub = tab.data_subscription().map(Message::TermEvent);
+        // let mut sb = vec![];
+        // for id in self.tabs.keys() {
+        //     let tab = self.tabs.get(id).unwrap();
+        //     let sub = tab.data_subscription().map(Message::TermEvent);
 
-            sb.push(sub)
-        }
+        //     sb.push(sub)
+        // }
 
-        Subscription::batch(sb)
+        // let global_events_sub =
+        //     iced::subscription::events().map(Message::GlobalEvents);
+        // sb.push(global_events_sub);
+
+        // Subscription::batch(sb)
+        Subscription::none()
     }
 }
