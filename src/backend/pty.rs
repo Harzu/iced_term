@@ -1,35 +1,28 @@
 use crate::backend::BackendSettings;
 use crate::backend::RenderableCell;
+use alacritty_terminal::event::Notify;
 use alacritty_terminal::event::{EventListener, OnResize, WindowSize};
+use alacritty_terminal::event_loop::Notifier;
 use alacritty_terminal::grid::Scroll;
-use alacritty_terminal::term::{cell, test::TermSize};
-use alacritty_terminal::tty::EventedReadWrite;
-use alacritty_terminal::vte::ansi;
-use std::fs::File;
-use std::io::Write;
-use std::io::{Read, Result};
+use alacritty_terminal::sync::FairMutex;
+use alacritty_terminal::term::{cell, TermMode, test::TermSize};
+use std::borrow::Cow;
+use std::io::Result;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 pub struct Pty {
     _id: u64,
-    pub pty: alacritty_terminal::tty::Pty,
-    term: alacritty_terminal::Term<EventProxy>,
-    reader: File,
-    parser: ansi::Processor,
-    pub poller: Arc<polling::Poller>,
-    pub read_interest: polling::Event,
-}
-
-impl Drop for Pty {
-    fn drop(&mut self) {
-        println!("drop");
-        self.pty.deregister(&self.poller).unwrap();
-        // self.poller.delete(&self.reader).unwrap();
-    }
+    term: Arc<FairMutex<alacritty_terminal::Term<EventProxy>>>,
+    notifier: Notifier,
 }
 
 impl Pty {
-    pub fn new(id: u64, settings: BackendSettings) -> Result<Self> {
+    pub fn new(
+        id: u64,
+        event_sender: mpsc::Sender<alacritty_terminal::event::Event>,
+        settings: BackendSettings,
+    ) -> Result<Self> {
         let pty_config = alacritty_terminal::tty::Options {
             shell: Some(alacritty_terminal::tty::Shell::new(
                 settings.shell,
@@ -45,54 +38,36 @@ impl Pty {
             num_lines: settings.rows,
         };
 
-        let mut pty =
-            alacritty_terminal::tty::new(&pty_config, window_size, id)?;
+        let pty = alacritty_terminal::tty::new(&pty_config, window_size, id)?;
         let term_size =
             TermSize::new(settings.cols as usize, settings.rows as usize);
-        let reader = pty.reader().try_clone()?;
-        let term =
-            alacritty_terminal::Term::new(config, &term_size, EventProxy {});
+        let event_proxy = EventProxy(event_sender);
+        let term = Arc::new(FairMutex::new(alacritty_terminal::Term::new(
+            config,
+            &term_size,
+            event_proxy.clone(),
+        )));
 
-        let poller = Arc::new(polling::Poller::new()?);
-        let interest = polling::Event::readable(id as usize);
-
-        unsafe {
-            poller.add_with_mode(
-                &reader,
-                interest,
-                polling::PollMode::Level,
-            )?;
-            pty.register(&poller, interest, polling::PollMode::Level)?;
-        }
+        let pty_event_loop = alacritty_terminal::event_loop::EventLoop::new(
+            term.clone(),
+            event_proxy,
+            pty,
+            false,
+            false,
+        );
+        let notifier = Notifier(pty_event_loop.channel());
+        let _pty_join_handle = pty_event_loop.spawn();
 
         Ok(Self {
             _id: id,
-            pty,
-            reader,
-            term,
-            parser: ansi::Processor::new(),
-            poller,
-            read_interest: interest,
+            term: term.clone(),
+            notifier,
         })
     }
 
-    pub unsafe fn poller(&self) -> Arc<polling::Poller> {
-        self.poller.to_owned()
+    pub fn is_app_cursor_mode(&self) -> bool {
+        self.term.lock().mode().contains(TermMode::APP_CURSOR)
     }
-
-    // pub fn read(reader: &File, buf: &mut [u8]) -> Option<Vec<u8>> {
-    //     match reader.try_clone().unwrap().read(buf) {
-    //         Ok(n) => Some(buf[..n].to_vec()),
-    //         Err(_) => None,
-    //     }
-    // }
-
-    // pub fn read(reader: &File, buf: &mut [u8]) -> Result<Vec<u8>> {
-    //     match reader.try_clone().unwrap().read(buf) {
-    //         Ok(n) => Some(buf[..n].to_vec()),
-    //         Err(_) => None,
-    //     }
-    // }
 
     pub fn resize(
         &mut self,
@@ -100,7 +75,7 @@ impl Pty {
         cols: u16,
         font_width: f32,
         font_height: f32,
-    ) -> Vec<RenderableCell> {
+    ) {
         if rows > 0 && cols > 0 {
             let size = WindowSize {
                 cell_width: font_width as u16,
@@ -109,43 +84,34 @@ impl Pty {
                 num_lines: rows,
             };
 
-            self.pty.on_resize(size);
-            self.term.resize(TermSize::new(
+            self.notifier.on_resize(size);
+            self.term.lock().resize(TermSize::new(
                 size.num_cols as usize,
                 size.num_lines as usize,
             ));
         }
-
-        self.cells()
     }
 
-    pub fn scroll(&mut self, delta_value: i32) -> Vec<RenderableCell> {
+    pub fn write_to_pty<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
+        self.notifier.notify(input);
+        self.term.lock().scroll_display(Scroll::Bottom);
+    }
+
+    pub fn scroll(&mut self, delta_value: i32) {
         let scroll = Scroll::Delta(delta_value);
-        self.term.scroll_display(scroll);
-        self.cells()
+        self.term.lock().scroll_display(scroll);
     }
 
-    pub fn reader(&self) -> File {
-        self.reader.try_clone().unwrap()
-    }
-
-    pub fn update(&mut self, data: Vec<u8>) -> Vec<RenderableCell> {
-        data.iter().for_each(|item| {
-            self.parser.advance(&mut self.term, *item);
-        });
-
-        self.cells()
-    }
-
-    pub fn write_to_pty(&mut self, c: char) {
-        self.term.scroll_display(Scroll::Bottom);
-        self.pty.writer().write_all(&[c as u8]).unwrap();
+    pub fn cursor(&self) {
+        
     }
 
     pub fn cells(&self) -> Vec<RenderableCell> {
         let mut res = vec![];
-        let content = self.term.renderable_content();
+        let term = self.term.lock_unfair();
 
+        let content = term.renderable_content();
+        let cursor = content.cursor;
         for item in content.display_iter {
             let point = item.point;
             let cell = item.cell;
@@ -170,13 +136,20 @@ impl Pty {
     }
 }
 
-#[derive(Clone)]
-struct EventProxy;
+impl Drop for Pty {
+    fn drop(&mut self) {
+        let _ = self
+            .notifier
+            .0
+            .send(alacritty_terminal::event_loop::Msg::Shutdown);
+    }
+}
 
-impl EventProxy {}
+#[derive(Clone)]
+pub struct EventProxy(mpsc::Sender<alacritty_terminal::event::Event>);
 
 impl EventListener for EventProxy {
-    fn send_event(&self, e: alacritty_terminal::event::Event) {
-        println!("{:?}", e);
+    fn send_event(&self, event: alacritty_terminal::event::Event) {
+        let _ = self.0.blocking_send(event);
     }
 }

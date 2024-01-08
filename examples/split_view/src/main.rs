@@ -1,17 +1,22 @@
-use iced::alignment;
 use iced::executor;
+use iced::font::{Family, Stretch, Weight};
 use iced::theme::{self, Theme};
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::widget::{button, container, responsive, row, text};
+use iced::{alignment, Font};
 use iced::{
     window, Application, Color, Command, Element, Length, Settings,
     Subscription,
 };
 use std::collections::HashMap;
 
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
+    include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
+
 pub fn main() -> iced::Result {
     Example::run(Settings {
         antialiasing: true,
+        default_font: Font::MONOSPACE,
         window: window::Settings {
             size: (800, 600),
             ..window::Settings::default()
@@ -35,21 +40,31 @@ enum Message {
     Resized(pane_grid::ResizeEvent),
     Close(pane_grid::Pane),
     TermEvent(iced_term::Event),
+    FontLoaded(Result<(), iced::font::Error>),
 }
 
 impl Application for Example {
+    type Executor = executor::Default;
     type Message = Message;
     type Theme = Theme;
-    type Executor = executor::Default;
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
         let initial_pane_id = 0;
         let (panes, _) = pane_grid::State::new(Pane::new(initial_pane_id));
         let term_settings = iced_term::TermSettings {
-            font: iced_term::FontSettings { size: 14.0 },
+            font: iced_term::FontSettings {
+                size: 14.0,
+                font_type: Font {
+                    weight: Weight::Bold,
+                    family: Family::Name("JetBrains Mono"),
+                    monospaced: false,
+                    stretch: Stretch::Normal,
+                },
+                ..iced_term::FontSettings::default()
+            },
             backend: iced_term::BackendSettings {
-                shell: "/bin/bash".to_string(), // env!("SHELL").to_string(),
+                shell: env!("SHELL").to_string(),
                 ..iced_term::BackendSettings::default()
             },
         };
@@ -66,7 +81,8 @@ impl Application for Example {
                 term_settings,
                 focus: None,
             },
-            Command::none(),
+            Command::batch(vec![iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
+                .map(Message::FontLoaded)]),
         )
     }
 
@@ -76,6 +92,7 @@ impl Application for Example {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
+            Message::FontLoaded(font) => {},
             Message::Split(axis, pane) => {
                 let result = self.panes.split(
                     axis,
@@ -120,25 +137,22 @@ impl Application for Example {
                 self.panes.resize(&split, ratio);
             },
             Message::Close(pane) => {
-                if let Some((clsoed_pane, sibling)) = self.panes.close(&pane) {
-                    let tab_id = clsoed_pane.id as u64;
+                if let Some((closed_pane, sibling)) = self.panes.close(&pane) {
+                    let tab_id = closed_pane.id as u64;
                     self.tabs.remove(&tab_id);
                     self.focus = Some(sibling);
                 }
             },
-            Message::TermEvent(m) => {
-                match m {
-                    iced_term::Event::InputReceived(id, c) => {
+            Message::TermEvent(event) => {
+                match event {
+                    iced_term::Event::CharInputReceived(id, c) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::WriteToPTY(c))
+                            tab.update(iced_term::Command::WriteToBackend(
+                                vec![c as u8],
+                            ))
                         }
                     },
-                    iced_term::Event::DataUpdated(id, data) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::RenderData(data))
-                        }
-                    },
-                    iced_term::Event::ContainerScrolled(id, delta) => {
+                    iced_term::Event::Scrolled(id, delta) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
                             tab.update(iced_term::Command::Scroll(delta as i32))
                         }
@@ -148,16 +162,18 @@ impl Application for Example {
                             tab.update(iced_term::Command::Resize(size));
                         }
                     },
-                    iced_term::Event::TermEventTx(id, tx) => {
+                    iced_term::Event::BackendEventSenderReceived(id, tx) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::InitPty(tx));
+                            tab.update(iced_term::Command::InitBackend(tx));
                         }
                     },
-                    iced_term::Event::TermEvent(id, inner_event) => {
+                    iced_term::Event::BackendEventReceived(id, inner_event) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::BackendEvent(
-                                inner_event,
-                            ));
+                            tab.update(
+                                iced_term::Command::ProcessBackendEvent(
+                                    inner_event,
+                                ),
+                            );
                         }
                     },
                     _ => {},
@@ -166,21 +182,6 @@ impl Application for Example {
         }
 
         Command::none()
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        let mut sb = vec![];
-        for id in self.tabs.keys() {
-            // println!("{}", id);
-            let tab = self.tabs.get(id).unwrap();
-            // println!("tab_id sub {}", tab.id());
-            let sub = tab.event_sub().map(Message::TermEvent);
-
-            sb.push(sub)
-        }
-
-        // Subscription::
-        Subscription::batch(sb)
     }
 
     fn view(&self) -> Element<Message> {
@@ -230,6 +231,17 @@ impl Application for Example {
             .height(Length::Fill)
             .padding(10)
             .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        let mut sb = vec![];
+        for id in self.tabs.keys() {
+            let tab = self.tabs.get(id).unwrap();
+            let sub = tab.subscription().map(Message::TermEvent);
+            sb.push(sub)
+        }
+
+        Subscription::batch(sb)
     }
 }
 

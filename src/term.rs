@@ -1,49 +1,39 @@
-use std::io::Read;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-
-use crate::backend::{BackendSettings, Pty, PtyV2, RenderableCell};
+use crate::backend::{BackendSettings, Pty, RenderableCell};
+use crate::font::TermFont;
 use crate::{font, FontSettings};
-use alacritty_terminal::tty::EventedReadWrite;
 use iced::alignment::{Horizontal, Vertical};
 use iced::futures::SinkExt;
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
 use iced::{
-    Color, Element, Font, Length, Point, Rectangle, Size, Subscription, Theme,
+    Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
 };
+use iced::keyboard::KeyCode;
 use iced_graphics::core::widget::Tree;
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
-use iced_native::subscription;
-use polling::os::kqueue::{PollerKqueueExt, Signal};
-use polling::PollMode;
 use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    DataUpdated(u64, Vec<u8>),
-    DataUpdated2(u64, Vec<RenderableCell>),
-    InputReceived(u64, char),
-    ContainerScrolled(u64, f32),
+    Scrolled(u64, f32),
     Resized(u64, Size<f32>),
     Ignored(u64),
-    TermEventTx(u64, Sender<alacritty_terminal::event::Event>),
-    TermEvent(u64, alacritty_terminal::event::Event),
+    InputReceived(u64, Vec<u8>),
+    BackendEventSenderReceived(u64, Sender<alacritty_terminal::event::Event>),
+    BackendEventReceived(u64, alacritty_terminal::event::Event),
 }
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    InitPty(Sender<alacritty_terminal::event::Event>),
+    InitBackend(Sender<alacritty_terminal::event::Event>),
     Focus,
     LostFocus,
-    WriteToPTY(char),
-    RenderData(Vec<u8>),
-    RenderData2(Vec<RenderableCell>),
+    WriteToBackend(Vec<u8>),
     Scroll(i32),
     Resize(Size<f32>),
-    BackendEvent(alacritty_terminal::event::Event),
+    ProcessBackendEvent(alacritty_terminal::event::Event),
 }
 
 #[derive(Default, Clone)]
@@ -54,26 +44,21 @@ pub struct TermSettings {
 
 pub struct Term {
     id: u64,
-    font_size: f32,
-    font_measure: Size<f32>,
+    font: TermFont,
     padding: u16,
     cache: Cache,
     is_focused: bool,
-    renderable_content: Vec<RenderableCell>,
-    backend: Option<PtyV2>,
+    backend: Option<Pty>,
     size: Size<f32>,
 }
 
 impl Term {
     pub fn new(id: u64, settings: TermSettings) -> Self {
-        // let backend = Pty::new(id, settings.backend).unwrap();
         Self {
             id,
-            font_size: settings.font.size,
-            font_measure: font::font_measure(settings.font.size),
+            font: TermFont::new(settings.font),
             padding: 0,
             is_focused: true,
-            renderable_content: vec![],
             cache: Cache::default(),
             backend: None,
             size: Size {
@@ -87,36 +72,35 @@ impl Term {
         self.id
     }
 
-    pub fn event_sub(&self) -> Subscription<Event> {
+    pub fn subscription(&self) -> Subscription<Event> {
         let id = self.id();
-        iced::subscription::channel(
-            id.clone(),
-            100,
-            move |mut output| async move {
-                let (event_tx, mut event_rx) = mpsc::channel(100);
+        iced::subscription::channel(id, 100, move |mut output| async move {
+            let (event_tx, mut event_rx) = mpsc::channel(100);
+            output
+                .send(Event::BackendEventSenderReceived(id.clone(), event_tx))
+                .await
+                .unwrap();
+
+            while let Some(event) = event_rx.recv().await {
                 output
-                    .send(Event::TermEventTx(id.clone(), event_tx))
+                    .send(Event::BackendEventReceived(id.clone(), event))
                     .await
                     .unwrap();
+            }
 
-                while let Some(event) = event_rx.recv().await {
-                    output
-                        .send(Event::TermEvent(id.clone(), event))
-                        .await
-                        .unwrap();
-                }
-
-                panic!("terminal event channel closed");
-            },
-        )
+            panic!("terminal event channel closed");
+        })
     }
 
     pub fn update(&mut self, cmd: Command) {
         match cmd {
-            Command::InitPty(sender) => {
+            Command::InitBackend(sender) => {
                 self.backend = Some(
-                    PtyV2::new(self.id(), sender, BackendSettings::default())
-                        .unwrap(),
+                    Pty::new(self.id, sender, BackendSettings::default())
+                        .expect(
+                            format!("init pty with ID: {} is failed", self.id)
+                                .as_str(),
+                        ),
                 )
             },
             Command::Focus => {
@@ -125,35 +109,24 @@ impl Term {
             Command::LostFocus => {
                 self.is_focused = false;
             },
-            Command::BackendEvent(event) => {
+            Command::ProcessBackendEvent(event) => {
                 if let Some(ref mut backend) = self.backend {
                     match event {
                         alacritty_terminal::event::Event::Wakeup => {
-                            // println!("wakeup");
-                            self.renderable_content = backend.cells();
                             self.cache.clear();
                         },
                         _ => {},
                     }
                 }
             },
-            Command::WriteToPTY(c) => {
+            Command::WriteToBackend(input) => {
                 if let Some(ref mut backend) = self.backend {
-                    let input = c.clone().to_string().into_bytes();
                     backend.write_to_pty(input);
-                }
-            },
-            Command::RenderData(data) => {
-                if let Some(ref mut backend) = self.backend {
-                    // let content = backend.update(data);
-                    // self.renderable_content = content;
-                    // self.cache.clear();
                 }
             },
             Command::Scroll(delta) => {
                 if let Some(ref mut backend) = self.backend {
                     backend.scroll(delta);
-                    self.renderable_content = backend.cells();
                     self.cache.clear();
                 }
             },
@@ -165,22 +138,20 @@ impl Term {
                         (size.width - container_padding).max(1.0);
                     let container_height =
                         (size.height - container_padding).max(1.0);
-                    let rows = (container_height / self.font_measure.height)
+                    let rows = (container_height / self.font.measure().height)
                         .floor() as u16;
-                    let cols = (container_width / self.font_measure.width)
+                    let cols = (container_width / self.font.measure().width)
                         .floor() as u16;
                     backend.resize(
                         rows,
                         cols,
-                        self.font_measure.width,
-                        self.font_measure.height,
+                        self.font.measure().width,
+                        self.font.measure().height,
                     );
-                    self.renderable_content = backend.cells();
                     self.cache.clear();
                     self.size = size;
                 }
             },
-            _ => {},
         }
     }
 
@@ -196,12 +167,8 @@ impl Term {
     fn handle_mouse_event(&self, event: iced::mouse::Event) -> Event {
         match event {
             iced::mouse::Event::WheelScrolled { delta } => match delta {
-                ScrollDelta::Lines { x: _, y } => {
-                    Event::ContainerScrolled(self.id, y)
-                },
-                ScrollDelta::Pixels { x: _, y } => {
-                    Event::ContainerScrolled(self.id, y)
-                },
+                ScrollDelta::Lines { x: _, y } => Event::Scrolled(self.id, y),
+                ScrollDelta::Pixels { x: _, y } => Event::Scrolled(self.id, y),
             },
             _ => Event::Ignored(self.id),
         }
@@ -210,8 +177,35 @@ impl Term {
     fn handle_keyboard_event(&self, event: iced::keyboard::Event) -> Event {
         match event {
             iced::keyboard::Event::CharacterReceived(c) => {
-                Event::InputReceived(self.id, c)
+                Event::InputReceived(self.id, [c as u8].to_vec())
             },
+            iced::keyboard::Event::KeyPressed { key_code, modifiers } => {
+                println!("{:?} {:?}", key_code, modifiers);
+                let mut is_app_cursor_mode = false;
+                if let Some(ref backend) = self.backend {
+                    is_app_cursor_mode = backend.is_app_cursor_mode();
+                }
+
+                match key_code {
+                    KeyCode::Up => {
+                        let code = if is_app_cursor_mode { b"\x1BOA" } else { b"\x1B[A" };
+                        Event::InputReceived(self.id, code.to_vec())
+                    }
+                    KeyCode::Down => {
+                        let code = if is_app_cursor_mode { b"\x1BOB" } else { b"\x1B[B" };
+                        Event::InputReceived(self.id, code.to_vec())
+                    }
+                    KeyCode::Right => {
+                        let code = if is_app_cursor_mode { b"\x1BOC" } else { b"\x1B[C" };
+                        Event::InputReceived(self.id, code.to_vec())
+                    }
+                    KeyCode::Left => {
+                        let code = if is_app_cursor_mode { b"\x1BOD" } else { b"\x1B[D" };
+                        Event::InputReceived(self.id, code.to_vec())
+                    },
+                    _ => Event::Ignored(self.id)
+                }
+            }
             _ => Event::Ignored(self.id),
         }
     }
@@ -264,46 +258,96 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         viewport: &Rectangle,
     ) {
         let geom = self.cache.draw(renderer, viewport.size(), |frame| {
-            for cell in &self.renderable_content {
-                let cell_width = self.font_measure.width as f64;
-                let cell_height = self.font_measure.height as f64;
+            if let Some(ref backend) = self.backend {
+                for cell in backend.cells() {
+                    let cell_width = self.font.measure().width as f64;
+                    let cell_height = self.font.measure().height as f64;
 
-                let x = cell.column as f64 * cell_width;
-                let y = (cell.line as f64 + cell.display_offset as f64)
-                    * cell_height;
-                let fg = font::get_color(cell.fg);
-                let bg = font::get_color(cell.bg);
+                    let x = cell.column as f64 * cell_width;
+                    let y = (cell.line as f64 + cell.display_offset as f64)
+                        * cell_height;
+                    let fg = font::get_color(cell.fg);
+                    let bg = font::get_color(cell.bg);
 
-                let size = Size::new(cell_width as f32, cell_height as f32);
-                let background = Path::rectangle(
-                    Point {
-                        x: x as f32 + layout.position().x,
-                        y: y as f32 + layout.position().y,
-                    },
-                    size,
-                );
-                frame.fill(&background, bg);
-
-                if cell.content != ' ' && cell.content != '\t' {
-                    let text = Text {
-                        content: cell.content.to_string(),
-                        position: Point {
-                            x: layout.position().x
-                                + x as f32
-                                + size.width / 2.0,
-                            y: layout.position().y
-                                + y as f32
-                                + size.height / 2.0,
+                    let size = Size::new(cell_width as f32, cell_height as f32);
+                    let background = Path::rectangle(
+                        Point {
+                            x: layout.position().x + x as f32,
+                            y: layout.position().y + y as f32,
                         },
-                        font: Font::default(),
-                        size: self.font_size,
-                        color: fg,
-                        horizontal_alignment: Horizontal::Center,
-                        vertical_alignment: Vertical::Center,
-                        ..Text::default()
-                    };
+                        size,
+                    );
+                    frame.fill(&background, bg);
 
-                    frame.fill_text(text);
+                    // if cursor_point == &point {
+                    //     let rect = Size::new(
+                    //         char_width * cell.c.width().unwrap_or(1) as f64,
+                    //         line_height,
+                    //     )
+                    //         .to_rect()
+                    //         .with_origin(Point::new(
+                    //             cursor_point.column.0 as f64 * char_width,
+                    //             (cursor_point.line.0 as f64 + content.display_offset as f64)
+                    //                 * line_height,
+                    //         ));
+                    //     let cursor_color = if mode == Mode::Terminal {
+                    //         if self.run_config.with_untracked(|run_config| {
+                    //             run_config.as_ref().map(|r| r.stopped).unwrap_or(false)
+                    //         }) {
+                    //             config.color(LapceColor::LAPCE_ERROR)
+                    //         } else {
+                    //             config.color(LapceColor::TERMINAL_CURSOR)
+                    //         }
+                    //     } else {
+                    //         config.color(LapceColor::EDITOR_CARET)
+                    //     };
+                    //     if self.is_focused {
+                    //         cx.fill(&rect, cursor_color, 0.0);
+                    //     } else {
+                    //         cx.stroke(&rect, cursor_color, 1.0);
+                    //     }
+                    // }
+                    //
+                    // let bold = cell.flags.contains(Flags::BOLD)
+                    //     || cell.flags.contains(Flags::DIM_BOLD);
+                    //
+                    // if &point == cursor_point && self.is_focused {
+                    //     fg = term_bg;
+                    // }
+                    //
+                    // if cell.c != ' ' && cell.c != '\t' {
+                    //     let mut attrs = attrs.color(fg);
+                    //     if bold {
+                    //         attrs = attrs.weight(Weight::BOLD);
+                    //     }
+                    //     text_layout.set_text(&cell.c.to_string(), AttrsList::new(attrs));
+                    //     cx.draw_text(
+                    //         &text_layout,
+                    //         Point::new(x, y + (line_height - char_size.height) / 2.0),
+                    //     );
+                    // }
+
+                    if cell.content != ' ' && cell.content != '\t' {
+                        let text = Text {
+                            content: cell.content.to_string(),
+                            position: Point {
+                                x: layout.position().x
+                                    + x as f32
+                                    + size.width / 2.0,
+                                y: layout.position().y
+                                    + y as f32
+                                    + size.height / 2.0,
+                            },
+                            font: self.font.font_type(),
+                            size: self.font.size(),
+                            color: fg,
+                            horizontal_alignment: Horizontal::Center,
+                            vertical_alignment: Vertical::Center,
+                            ..Text::default()
+                        };
+
+                        frame.fill_text(text);
+                    }
                 }
             }
         });
