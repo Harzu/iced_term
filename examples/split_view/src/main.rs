@@ -49,7 +49,7 @@ impl Application for Example {
         let term_settings = iced_term::TermSettings {
             font: iced_term::FontSettings { size: 14.0 },
             backend: iced_term::BackendSettings {
-                shell: env!("SHELL").to_string(),
+                shell: "/bin/bash".to_string(), // env!("SHELL").to_string(),
                 ..iced_term::BackendSettings::default()
             },
         };
@@ -91,11 +91,11 @@ impl Application for Example {
 
                 if let Some((pane, _)) = result {
                     let prev_focused_tab_id = (self.panes_created - 1) as u64;
-                    let prev_focused_tab = self
-                        .tabs
-                        .get_mut(&prev_focused_tab_id)
-                        .expect("init pty is failed");
-                    prev_focused_tab.update(iced_term::Command::LostFocus);
+                    if let Some(prev_focused_tab) =
+                        self.tabs.get_mut(&prev_focused_tab_id)
+                    {
+                        prev_focused_tab.update(iced_term::Command::LostFocus);
+                    }
                     self.focus = Some(pane);
                 }
 
@@ -129,32 +129,36 @@ impl Application for Example {
             Message::TermEvent(m) => {
                 match m {
                     iced_term::Event::InputReceived(id, c) => {
-                        let tab = self
-                            .tabs
-                            .get_mut(&id)
-                            .expect("tab with target id not found");
-                        tab.update(iced_term::Command::WriteToPTY(c))
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(iced_term::Command::WriteToPTY(c))
+                        }
                     },
                     iced_term::Event::DataUpdated(id, data) => {
-                        let tab = self
-                            .tabs
-                            .get_mut(&id)
-                            .expect("tab with target id not found");
-                        tab.update(iced_term::Command::RenderData(data))
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(iced_term::Command::RenderData(data))
+                        }
                     },
                     iced_term::Event::ContainerScrolled(id, delta) => {
-                        let tab = self
-                            .tabs
-                            .get_mut(&id)
-                            .expect("tab with target id not found");
-                        tab.update(iced_term::Command::Scroll(delta as i32))
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(iced_term::Command::Scroll(delta as i32))
+                        }
                     },
                     iced_term::Event::Resized(id, size) => {
-                        let tab = self
-                            .tabs
-                            .get_mut(&id)
-                            .expect("tab with target id not found");
-                        tab.update(iced_term::Command::Resize(size));
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(iced_term::Command::Resize(size));
+                        }
+                    },
+                    iced_term::Event::TermEventTx(id, tx) => {
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(iced_term::Command::InitPty(tx));
+                        }
+                    },
+                    iced_term::Event::TermEvent(id, inner_event) => {
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(iced_term::Command::BackendEvent(
+                                inner_event,
+                            ));
+                        }
                     },
                     _ => {},
                 };
@@ -167,12 +171,15 @@ impl Application for Example {
     fn subscription(&self) -> Subscription<Message> {
         let mut sb = vec![];
         for id in self.tabs.keys() {
+            // println!("{}", id);
             let tab = self.tabs.get(id).unwrap();
-            let sub = tab.data_subscription().map(Message::TermEvent);
+            // println!("tab_id sub {}", tab.id());
+            let sub = tab.event_sub().map(Message::TermEvent);
 
             sb.push(sub)
         }
 
+        // Subscription::
         Subscription::batch(sb)
     }
 
