@@ -1,6 +1,12 @@
-use crate::backend::{BackendSettings, Pty, RenderableCell};
+use std::io::Read;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+
+use crate::backend::{BackendSettings, Pty, PtyV2, RenderableCell};
 use crate::{font, FontSettings};
+use alacritty_terminal::tty::EventedReadWrite;
 use iced::alignment::{Horizontal, Vertical};
+use iced::futures::SinkExt;
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
@@ -10,6 +16,10 @@ use iced::{
 use iced_graphics::core::widget::Tree;
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
+use iced_native::subscription;
+use polling::os::kqueue::{PollerKqueueExt, Signal};
+use polling::PollMode;
+use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -19,10 +29,13 @@ pub enum Event {
     ContainerScrolled(u64, f32),
     Resized(u64, Size<f32>),
     Ignored(u64),
+    TermEventTx(u64, Sender<alacritty_terminal::event::Event>),
+    TermEvent(u64, alacritty_terminal::event::Event),
 }
 
 #[derive(Debug, Clone)]
 pub enum Command {
+    InitPty(Sender<alacritty_terminal::event::Event>),
     Focus,
     LostFocus,
     WriteToPTY(char),
@@ -30,6 +43,7 @@ pub enum Command {
     RenderData2(Vec<RenderableCell>),
     Scroll(i32),
     Resize(Size<f32>),
+    BackendEvent(alacritty_terminal::event::Event),
 }
 
 #[derive(Default, Clone)]
@@ -46,15 +60,13 @@ pub struct Term {
     cache: Cache,
     is_focused: bool,
     renderable_content: Vec<RenderableCell>,
-    backend: Pty,
+    backend: Option<PtyV2>,
     size: Size<f32>,
 }
 
 impl Term {
     pub fn new(id: u64, settings: TermSettings) -> Self {
-        let backend = Pty::new(id, settings.backend).unwrap();
-        // let read_data = backend.run();
-
+        // let backend = Pty::new(id, settings.backend).unwrap();
         Self {
             id,
             font_size: settings.font.size,
@@ -63,7 +75,7 @@ impl Term {
             is_focused: true,
             renderable_content: vec![],
             cache: Cache::default(),
-            backend,
+            backend: None,
             size: Size {
                 width: 0.0,
                 height: 0.0,
@@ -75,77 +87,100 @@ impl Term {
         self.id
     }
 
-    pub fn data_subscription(&self) -> Subscription<Event> {
-        let poller = polling::Poller::new().unwrap();
-        unsafe {
-            poller.add(&self.backend.reader(), polling::Event::readable(self.id as usize)).unwrap();
-        }
+    pub fn event_sub(&self) -> Subscription<Event> {
+        let id = self.id();
+        iced::subscription::channel(
+            id.clone(),
+            100,
+            move |mut output| async move {
+                let (event_tx, mut event_rx) = mpsc::channel(100);
+                output
+                    .send(Event::TermEventTx(id.clone(), event_tx))
+                    .await
+                    .unwrap();
 
-        iced::subscription::unfold(
-            format!("iced_term_{}", self.id),
-            (self.id, poller, self.backend.reader()),
-            move |(id, poller, reader)| async move {
-                let mut events = polling::Events::new();
-                poller.wait(&mut events, None).unwrap();
-
-                for event in events.iter() {
-                    println!("{:?}", event);
-                    if event.readable {
-                        let mut buf = [0u8; 0x10000];
-                        if let Some(data) = Pty::read(&reader, &mut buf) {
-                            poller.modify(&reader, polling::Event::readable(id as usize)).unwrap();
-                            return (Event::DataUpdated(id, data), (id, poller, reader))
-                        }
-                    }
+                while let Some(event) = event_rx.recv().await {
+                    output
+                        .send(Event::TermEvent(id.clone(), event))
+                        .await
+                        .unwrap();
                 }
 
-                (Event::Ignored(id), (id, poller, reader))
+                panic!("terminal event channel closed");
             },
         )
     }
 
     pub fn update(&mut self, cmd: Command) {
         match cmd {
+            Command::InitPty(sender) => {
+                self.backend = Some(
+                    PtyV2::new(self.id(), sender, BackendSettings::default())
+                        .unwrap(),
+                )
+            },
             Command::Focus => {
                 self.is_focused = true;
             },
             Command::LostFocus => {
                 self.is_focused = false;
             },
+            Command::BackendEvent(event) => {
+                if let Some(ref mut backend) = self.backend {
+                    match event {
+                        alacritty_terminal::event::Event::Wakeup => {
+                            // println!("wakeup");
+                            self.renderable_content = backend.cells();
+                            self.cache.clear();
+                        },
+                        _ => {},
+                    }
+                }
+            },
             Command::WriteToPTY(c) => {
-                self.backend.write_to_pty(c);
+                if let Some(ref mut backend) = self.backend {
+                    let input = c.clone().to_string().into_bytes();
+                    backend.write_to_pty(input);
+                }
             },
             Command::RenderData(data) => {
-                let content = self.backend.update(data);
-                self.renderable_content = content;
-                self.cache.clear();
+                if let Some(ref mut backend) = self.backend {
+                    // let content = backend.update(data);
+                    // self.renderable_content = content;
+                    // self.cache.clear();
+                }
             },
             Command::Scroll(delta) => {
-                let content = self.backend.scroll(delta);
-                self.renderable_content = content;
-                self.cache.clear();
+                if let Some(ref mut backend) = self.backend {
+                    backend.scroll(delta);
+                    self.renderable_content = backend.cells();
+                    self.cache.clear();
+                }
             },
             Command::Resize(size) => {
-                let container_padding =
-                    f32::from(self.padding.saturating_mul(2));
-                let container_width = (size.width - container_padding).max(1.0);
-                let container_height =
-                    (size.height - container_padding).max(1.0);
-                let rows = (container_height / self.font_measure.height).floor()
-                    as u16;
-                let cols =
-                    (container_width / self.font_measure.width).floor() as u16;
-                let content = self.backend.resize(
-                    rows,
-                    cols,
-                    self.font_measure.width,
-                    self.font_measure.height,
-                );
-                self.renderable_content = content;
-                self.cache.clear();
-                self.size = size;
+                if let Some(ref mut backend) = self.backend {
+                    let container_padding =
+                        f32::from(self.padding.saturating_mul(2));
+                    let container_width =
+                        (size.width - container_padding).max(1.0);
+                    let container_height =
+                        (size.height - container_padding).max(1.0);
+                    let rows = (container_height / self.font_measure.height)
+                        .floor() as u16;
+                    let cols = (container_width / self.font_measure.width)
+                        .floor() as u16;
+                    backend.resize(
+                        rows,
+                        cols,
+                        self.font_measure.width,
+                        self.font_measure.height,
+                    );
+                    self.renderable_content = backend.cells();
+                    self.cache.clear();
+                    self.size = size;
+                }
             },
-            _ => {}
+            _ => {},
         }
     }
 
@@ -160,9 +195,14 @@ impl Term {
 
     fn handle_mouse_event(&self, event: iced::mouse::Event) -> Event {
         match event {
-            iced::mouse::Event::WheelScrolled {
-                delta: ScrollDelta::Lines { x: _, y },
-            } => Event::ContainerScrolled(self.id, y),
+            iced::mouse::Event::WheelScrolled { delta } => match delta {
+                ScrollDelta::Lines { x: _, y } => {
+                    Event::ContainerScrolled(self.id, y)
+                },
+                ScrollDelta::Pixels { x: _, y } => {
+                    Event::ContainerScrolled(self.id, y)
+                },
+            },
             _ => Event::Ignored(self.id),
         }
     }

@@ -6,15 +6,26 @@ use alacritty_terminal::term::{cell, test::TermSize};
 use alacritty_terminal::tty::EventedReadWrite;
 use alacritty_terminal::vte::ansi;
 use std::fs::File;
-use std::io::{Read, Result};
 use std::io::Write;
+use std::io::{Read, Result};
+use std::sync::Arc;
 
 pub struct Pty {
     _id: u64,
-    pty: alacritty_terminal::tty::Pty,
+    pub pty: alacritty_terminal::tty::Pty,
     term: alacritty_terminal::Term<EventProxy>,
     reader: File,
     parser: ansi::Processor,
+    pub poller: Arc<polling::Poller>,
+    pub read_interest: polling::Event,
+}
+
+impl Drop for Pty {
+    fn drop(&mut self) {
+        println!("drop");
+        self.pty.deregister(&self.poller).unwrap();
+        // self.poller.delete(&self.reader).unwrap();
+    }
 }
 
 impl Pty {
@@ -39,11 +50,20 @@ impl Pty {
         let term_size =
             TermSize::new(settings.cols as usize, settings.rows as usize);
         let reader = pty.reader().try_clone()?;
-        let term = alacritty_terminal::Term::new(
-            config,
-            &term_size,
-            EventProxy {},
-        );
+        let term =
+            alacritty_terminal::Term::new(config, &term_size, EventProxy {});
+
+        let poller = Arc::new(polling::Poller::new()?);
+        let interest = polling::Event::readable(id as usize);
+
+        unsafe {
+            poller.add_with_mode(
+                &reader,
+                interest,
+                polling::PollMode::Level,
+            )?;
+            pty.register(&poller, interest, polling::PollMode::Level)?;
+        }
 
         Ok(Self {
             _id: id,
@@ -51,15 +71,28 @@ impl Pty {
             reader,
             term,
             parser: ansi::Processor::new(),
+            poller,
+            read_interest: interest,
         })
     }
 
-    pub fn read(reader: &File, buf: &mut [u8]) -> Option<Vec<u8>> {
-        match reader.try_clone().unwrap().read(buf) {
-            Ok(n) => Some(buf[..n].to_vec()),
-            Err(e) => None
-        }
+    pub unsafe fn poller(&self) -> Arc<polling::Poller> {
+        self.poller.to_owned()
     }
+
+    // pub fn read(reader: &File, buf: &mut [u8]) -> Option<Vec<u8>> {
+    //     match reader.try_clone().unwrap().read(buf) {
+    //         Ok(n) => Some(buf[..n].to_vec()),
+    //         Err(_) => None,
+    //     }
+    // }
+
+    // pub fn read(reader: &File, buf: &mut [u8]) -> Result<Vec<u8>> {
+    //     match reader.try_clone().unwrap().read(buf) {
+    //         Ok(n) => Some(buf[..n].to_vec()),
+    //         Err(_) => None,
+    //     }
+    // }
 
     pub fn resize(
         &mut self,

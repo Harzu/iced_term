@@ -1,3 +1,5 @@
+use tokio::sync::mpsc;
+
 const DEFAULT_SHELL: &str = "/bin/bash";
 const DEFAULT_COLS_NUM: u16 = 50;
 const DEFAULT_ROWS_NUM: u16 = 50;
