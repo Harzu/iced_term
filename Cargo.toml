@@ -3,6 +3,7 @@ members = ["examples/*"]
 
 [package]
 name = "iced_term"
+description = "Terminal emulator widget powered by ICED framework and alacritty terminal backend."
 authors = ["Ilya Shvyryalkin <ilyashvy@gmail.com>"]
 version = "0.1.0"
 edition = "2021"

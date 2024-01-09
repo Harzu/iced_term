@@ -8,7 +8,7 @@
 ![GitHub License](https://img.shields.io/github/license/Harzu/iced_term)
 ![Crates.io Downloads (recent)](https://img.shields.io/crates/dr/iced_term)
 
-Terminal emulator widget based on ICED fraemwork and alacritty_terminal backend.
+Terminal emulator widget powered by ICED framework and alacritty terminal backend.
 
 <a href="./examples/full_screen">
   <img src="examples/full_screen/assets/screenshot.png" width="275px">
