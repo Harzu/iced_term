@@ -39,7 +39,7 @@ enum Message {
     Clicked(pane_grid::Pane),
     Resized(pane_grid::ResizeEvent),
     Close(pane_grid::Pane),
-    TermEvent(iced_term::Event),
+    IcedTermEvent(iced_term::Event),
     FontLoaded(Result<(), iced::font::Error>),
 }
 
@@ -143,7 +143,7 @@ impl Application for Example {
                     self.focus = Some(sibling);
                 }
             },
-            Message::TermEvent(event) => {
+            Message::IcedTermEvent(event) => {
                 match event {
                     iced_term::Event::InputReceived(id, data) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
@@ -235,7 +235,7 @@ impl Application for Example {
         let mut sb = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            let sub = tab.subscription().map(Message::TermEvent);
+            let sub = tab.subscription().map(Message::IcedTermEvent);
             sb.push(sub)
         }
 
@@ -274,7 +274,7 @@ fn view_content(
     tabs: &HashMap<u64, iced_term::Term>,
 ) -> Element<'_, Message> {
     let tab = tabs.get(&pane_id).expect("tab with target id not found");
-    let tab_view = tab.view().map(Message::TermEvent);
+    let tab_view = tab.view().map(Message::IcedTermEvent);
 
     container(tab_view)
         .width(Length::Fill)

@@ -29,6 +29,8 @@ The widget is currently under development and does not provide full terminal fea
 - Resizing
 - Scrolling
 
+This widget tested on MacOS and Linux and is not tested on Windows.
+
 ## Installation
 
 ```toml
@@ -203,6 +205,8 @@ Run your application
 ```shell
 cargo run --release
 ```
+
+You can also look at [examples](./examples) directory for more information about widget using.
 
 ## Dependencies
 

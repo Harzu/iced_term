@@ -23,7 +23,7 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    TermEvent(iced_term::Event),
+    IcedTermEvent(iced_term::Event),
     FontLoaded(Result<(), iced::font::Error>),
 }
 
@@ -75,7 +75,7 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
             Message::FontLoaded(_) => Command::none(),
-            Message::TermEvent(event) => {
+            Message::IcedTermEvent(event) => {
                 match event {
                     iced_term::Event::InputReceived(_, input) => {
                         self.term
@@ -106,11 +106,11 @@ impl Application for App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        self.term.subscription().map(Message::TermEvent)
+        self.term.subscription().map(Message::IcedTermEvent)
     }
 
     fn view(&self) -> Element<Message, iced::Renderer> {
-        let tab_view = self.term.view().map(Message::TermEvent);
+        let tab_view = self.term.view().map(Message::IcedTermEvent);
 
         container(tab_view)
             .width(Length::Fill)
