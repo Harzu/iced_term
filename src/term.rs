@@ -49,6 +49,7 @@ pub struct Term {
     padding: u16,
     cache: Cache,
     is_focused: bool,
+    backend_settings: BackendSettings,
     backend: Option<Pty>,
     size: Size<f32>,
 }
@@ -61,6 +62,7 @@ impl Term {
             padding: 0,
             is_focused: true,
             cache: Cache::default(),
+            backend_settings: settings.backend,
             backend: None,
             size: Size {
                 width: 0.0,
@@ -97,7 +99,7 @@ impl Term {
         match cmd {
             Command::InitBackend(sender) => {
                 self.backend = Some(
-                    Pty::new(self.id, sender, BackendSettings::default())
+                    Pty::new(self.id, sender, self.backend_settings.clone())
                         .unwrap_or_else(|_| {
                             panic!("init pty with ID: {} is failed", self.id);
                         }),

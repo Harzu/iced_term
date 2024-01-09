@@ -18,7 +18,7 @@ pub fn main() -> iced::Result {
         antialiasing: true,
         default_font: Font::MONOSPACE,
         window: window::Settings {
-            size: (800, 600),
+            size: (1280, 720),
             ..window::Settings::default()
         },
         ..Settings::default()
