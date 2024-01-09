@@ -6,6 +6,9 @@ name = "iced_term"
 authors = ["Ilya Shvyryalkin <ilyashvy@gmail.com>"]
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/Harzu/iced_term"
+categories = ["gui"]
+license = "MIT"
 
 [dependencies]
 alacritty_terminal = "0.20.0"
