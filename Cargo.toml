@@ -3,10 +3,9 @@ members = ["examples/*"]
 
 [package]
 name = "iced_term"
+authors = ["Ilya Shvyryalkin <ilyashvy@gmail.com>"]
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 alacritty_terminal = "0.20.0"
@@ -21,6 +20,3 @@ iced = { version = "0.10.0", features = [
 tokio = { version = "1.23.0", features = ["full"] }
 iced_graphics = "0.9.0"
 iced_tiny_skia = "0.1.0"
-iced_native = "0.10.3"
-polling = "3.3.1"
-mio = "0.8.10"
