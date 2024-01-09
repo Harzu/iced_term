@@ -7,3 +7,4 @@ publish = false
 [dependencies]
 iced = "0.10.0"
 iced_term = { path = "../../" }
+iced_native = "0.10.3"
