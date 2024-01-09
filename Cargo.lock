@@ -1267,8 +1267,6 @@ dependencies = [
  "iced_graphics",
  "iced_native",
  "iced_tiny_skia",
- "mio",
- "polling 3.3.1",
  "tokio",
 ]
 
