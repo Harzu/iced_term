@@ -30,7 +30,7 @@ pub enum Message {
 
 struct App {
     tabs: HashMap<u64, iced_term::Term>,
-    term_settings: iced_term::TermSettings,
+    _term_settings: iced_term::TermSettings,
 }
 
 impl Application for App {
@@ -64,7 +64,7 @@ impl Application for App {
         (
             Self {
                 tabs,
-                term_settings,
+                _term_settings: term_settings,
             },
             Command::batch(vec![iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
                 .map(Message::FontLoaded)]),

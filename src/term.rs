@@ -1,15 +1,16 @@
-use crate::backend::{BackendSettings, Pty, RenderableCell};
+use crate::backend::{BackendSettings, Pty};
 use crate::font::TermFont;
 use crate::{font, FontSettings};
+use alacritty_terminal::term::{cell, TermMode};
 use iced::alignment::{Horizontal, Vertical};
 use iced::futures::SinkExt;
+use iced::keyboard::KeyCode;
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
 use iced::{
     Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
 };
-use iced::keyboard::KeyCode;
 use iced_graphics::core::widget::Tree;
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
@@ -77,13 +78,13 @@ impl Term {
         iced::subscription::channel(id, 100, move |mut output| async move {
             let (event_tx, mut event_rx) = mpsc::channel(100);
             output
-                .send(Event::BackendEventSenderReceived(id.clone(), event_tx))
+                .send(Event::BackendEventSenderReceived(id, event_tx))
                 .await
                 .unwrap();
 
             while let Some(event) = event_rx.recv().await {
                 output
-                    .send(Event::BackendEventReceived(id.clone(), event))
+                    .send(Event::BackendEventReceived(id, event))
                     .await
                     .unwrap();
             }
@@ -97,10 +98,9 @@ impl Term {
             Command::InitBackend(sender) => {
                 self.backend = Some(
                     Pty::new(self.id, sender, BackendSettings::default())
-                        .expect(
-                            format!("init pty with ID: {} is failed", self.id)
-                                .as_str(),
-                        ),
+                        .unwrap_or_else(|_| {
+                            panic!("init pty with ID: {} is failed", self.id);
+                        }),
                 )
             },
             Command::Focus => {
@@ -110,13 +110,8 @@ impl Term {
                 self.is_focused = false;
             },
             Command::ProcessBackendEvent(event) => {
-                if let Some(ref mut backend) = self.backend {
-                    match event {
-                        alacritty_terminal::event::Event::Wakeup => {
-                            self.cache.clear();
-                        },
-                        _ => {},
-                    }
+                if let alacritty_terminal::event::Event::Wakeup = event {
+                    self.cache.clear();
                 }
             },
             Command::WriteToBackend(input) => {
@@ -179,33 +174,51 @@ impl Term {
             iced::keyboard::Event::CharacterReceived(c) => {
                 Event::InputReceived(self.id, [c as u8].to_vec())
             },
-            iced::keyboard::Event::KeyPressed { key_code, modifiers } => {
-                println!("{:?} {:?}", key_code, modifiers);
+            iced::keyboard::Event::KeyPressed {
+                key_code,
+                modifiers: _,
+            } => {
                 let mut is_app_cursor_mode = false;
                 if let Some(ref backend) = self.backend {
-                    is_app_cursor_mode = backend.is_app_cursor_mode();
+                    is_app_cursor_mode = backend.is_mode(TermMode::APP_CURSOR);
                 }
 
                 match key_code {
                     KeyCode::Up => {
-                        let code = if is_app_cursor_mode { b"\x1BOA" } else { b"\x1B[A" };
-                        Event::InputReceived(self.id, code.to_vec())
-                    }
-                    KeyCode::Down => {
-                        let code = if is_app_cursor_mode { b"\x1BOB" } else { b"\x1B[B" };
-                        Event::InputReceived(self.id, code.to_vec())
-                    }
-                    KeyCode::Right => {
-                        let code = if is_app_cursor_mode { b"\x1BOC" } else { b"\x1B[C" };
-                        Event::InputReceived(self.id, code.to_vec())
-                    }
-                    KeyCode::Left => {
-                        let code = if is_app_cursor_mode { b"\x1BOD" } else { b"\x1B[D" };
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOA"
+                        } else {
+                            b"\x1B[A"
+                        };
                         Event::InputReceived(self.id, code.to_vec())
                     },
-                    _ => Event::Ignored(self.id)
+                    KeyCode::Down => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOB"
+                        } else {
+                            b"\x1B[B"
+                        };
+                        Event::InputReceived(self.id, code.to_vec())
+                    },
+                    KeyCode::Right => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOC"
+                        } else {
+                            b"\x1B[C"
+                        };
+                        Event::InputReceived(self.id, code.to_vec())
+                    },
+                    KeyCode::Left => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOD"
+                        } else {
+                            b"\x1B[D"
+                        };
+                        Event::InputReceived(self.id, code.to_vec())
+                    },
+                    _ => Event::Ignored(self.id),
                 }
-            }
+            },
             _ => Event::Ignored(self.id),
         }
     }
@@ -259,15 +272,22 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
     ) {
         let geom = self.cache.draw(renderer, viewport.size(), |frame| {
             if let Some(ref backend) = self.backend {
-                for cell in backend.cells() {
+                let content = backend.renderable_content();
+                for indexed in content.display_iter() {
                     let cell_width = self.font.measure().width as f64;
                     let cell_height = self.font.measure().height as f64;
 
-                    let x = cell.column as f64 * cell_width;
-                    let y = (cell.line as f64 + cell.display_offset as f64)
+                    let x = indexed.point.column.0 as f64 * cell_width;
+                    let y = (indexed.point.line.0 as f64
+                        + content.display_offset() as f64)
                         * cell_height;
-                    let fg = font::get_color(cell.fg);
-                    let bg = font::get_color(cell.bg);
+
+                    let mut fg = font::get_color(indexed.fg);
+                    let mut bg = font::get_color(indexed.bg);
+
+                    if indexed.cell.flags.contains(cell::Flags::INVERSE) {
+                        std::mem::swap(&mut fg, &mut bg);
+                    }
 
                     let size = Size::new(cell_width as f32, cell_height as f32);
                     let background = Path::rectangle(
@@ -279,57 +299,27 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
                     );
                     frame.fill(&background, bg);
 
-                    // if cursor_point == &point {
-                    //     let rect = Size::new(
-                    //         char_width * cell.c.width().unwrap_or(1) as f64,
-                    //         line_height,
-                    //     )
-                    //         .to_rect()
-                    //         .with_origin(Point::new(
-                    //             cursor_point.column.0 as f64 * char_width,
-                    //             (cursor_point.line.0 as f64 + content.display_offset as f64)
-                    //                 * line_height,
-                    //         ));
-                    //     let cursor_color = if mode == Mode::Terminal {
-                    //         if self.run_config.with_untracked(|run_config| {
-                    //             run_config.as_ref().map(|r| r.stopped).unwrap_or(false)
-                    //         }) {
-                    //             config.color(LapceColor::LAPCE_ERROR)
-                    //         } else {
-                    //             config.color(LapceColor::TERMINAL_CURSOR)
-                    //         }
-                    //     } else {
-                    //         config.color(LapceColor::EDITOR_CARET)
-                    //     };
-                    //     if self.is_focused {
-                    //         cx.fill(&rect, cursor_color, 0.0);
-                    //     } else {
-                    //         cx.stroke(&rect, cursor_color, 1.0);
-                    //     }
-                    // }
-                    //
-                    // let bold = cell.flags.contains(Flags::BOLD)
-                    //     || cell.flags.contains(Flags::DIM_BOLD);
-                    //
-                    // if &point == cursor_point && self.is_focused {
-                    //     fg = term_bg;
-                    // }
-                    //
-                    // if cell.c != ' ' && cell.c != '\t' {
-                    //     let mut attrs = attrs.color(fg);
-                    //     if bold {
-                    //         attrs = attrs.weight(Weight::BOLD);
-                    //     }
-                    //     text_layout.set_text(&cell.c.to_string(), AttrsList::new(attrs));
-                    //     cx.draw_text(
-                    //         &text_layout,
-                    //         Point::new(x, y + (line_height - char_size.height) / 2.0),
-                    //     );
-                    // }
+                    if content.cursor.point == indexed.point {
+                        let cursor_rect = Path::rectangle(
+                            Point {
+                                x: content.cursor.point.column.0 as f32
+                                    * cell_width as f32,
+                                y: (content.cursor.point.line.0
+                                    + content.display_offset() as i32)
+                                    as f32
+                                    * cell_height as f32,
+                            },
+                            Size::new(cell_width as f32, cell_height as f32),
+                        );
 
-                    if cell.content != ' ' && cell.content != '\t' {
+                        if !backend.is_mode(TermMode::ALT_SCREEN) {
+                            frame.fill(&cursor_rect, fg);
+                        }
+                    }
+
+                    if indexed.c != ' ' && indexed.c != '\t' {
                         let text = Text {
-                            content: cell.content.to_string(),
+                            content: indexed.c.to_string(),
                             position: Point {
                                 x: layout.position().x
                                     + x as f32

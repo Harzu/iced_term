@@ -92,7 +92,7 @@ impl Application for Example {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::FontLoaded(font) => {},
+            Message::FontLoaded(_) => {},
             Message::Split(axis, pane) => {
                 let result = self.panes.split(
                     axis,
@@ -145,11 +145,9 @@ impl Application for Example {
             },
             Message::TermEvent(event) => {
                 match event {
-                    iced_term::Event::CharInputReceived(id, c) => {
+                    iced_term::Event::InputReceived(id, data) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::WriteToBackend(
-                                vec![c as u8],
-                            ))
+                            tab.update(iced_term::Command::WriteToBackend(data))
                         }
                     },
                     iced_term::Event::Scrolled(id, delta) => {

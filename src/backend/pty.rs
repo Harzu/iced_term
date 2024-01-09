@@ -1,11 +1,12 @@
 use crate::backend::BackendSettings;
-use crate::backend::RenderableCell;
 use alacritty_terminal::event::Notify;
 use alacritty_terminal::event::{EventListener, OnResize, WindowSize};
 use alacritty_terminal::event_loop::Notifier;
 use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::{cell, TermMode, test::TermSize};
+use alacritty_terminal::term::cell::Cell;
+use alacritty_terminal::term::{test::TermSize, TermMode};
+use alacritty_terminal::Grid;
 use std::borrow::Cow;
 use std::io::Result;
 use std::sync::Arc;
@@ -65,8 +66,8 @@ impl Pty {
         })
     }
 
-    pub fn is_app_cursor_mode(&self) -> bool {
-        self.term.lock().mode().contains(TermMode::APP_CURSOR)
+    pub fn is_mode(&self, mode: TermMode) -> bool {
+        self.term.lock().mode().contains(mode)
     }
 
     pub fn resize(
@@ -102,44 +103,15 @@ impl Pty {
         self.term.lock().scroll_display(scroll);
     }
 
-    pub fn cursor(&self) {
-        
-    }
-
-    pub fn cells(&self) -> Vec<RenderableCell> {
-        let mut res = vec![];
+    pub fn renderable_content(&self) -> Grid<Cell> {
         let term = self.term.lock_unfair();
-
-        let content = term.renderable_content();
-        let cursor = content.cursor;
-        for item in content.display_iter {
-            let point = item.point;
-            let cell = item.cell;
-            let mut fg = cell.fg;
-            let mut bg = cell.bg;
-
-            if cell.flags.contains(cell::Flags::INVERSE) {
-                std::mem::swap(&mut fg, &mut bg);
-            }
-
-            res.push(RenderableCell {
-                column: point.column.0,
-                line: point.line.0,
-                content: cell.c,
-                display_offset: content.display_offset,
-                fg,
-                bg,
-            })
-        }
-
-        res
+        term.grid().clone()
     }
 }
 
 impl Drop for Pty {
     fn drop(&mut self) {
-        let _ = self
-            .notifier
+        self.notifier
             .0
             .send(alacritty_terminal::event_loop::Msg::Shutdown);
     }
