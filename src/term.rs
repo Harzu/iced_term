@@ -302,12 +302,14 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
                     if content.cursor.point == indexed.point {
                         let cursor_rect = Path::rectangle(
                             Point {
-                                x: content.cursor.point.column.0 as f32
-                                    * cell_width as f32,
-                                y: (content.cursor.point.line.0
-                                    + content.display_offset() as i32)
-                                    as f32
-                                    * cell_height as f32,
+                                x: layout.position().x
+                                    + content.cursor.point.column.0 as f32
+                                        * cell_width as f32,
+                                y: layout.position().y
+                                    + (content.cursor.point.line.0
+                                        + content.display_offset() as i32)
+                                        as f32
+                                        * cell_height as f32,
                             },
                             Size::new(cell_width as f32, cell_height as f32),
                         );
