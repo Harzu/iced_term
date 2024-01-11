@@ -57,7 +57,7 @@ fn font_measure(font_size: f32) -> Size<f32> {
     let renderer: Renderer<Backend, Theme> = Renderer::new(backend);
     text::Renderer::measure(
         &renderer,
-        "W",
+        "A",
         font_size,
         iced::widget::text::LineHeight::Relative(1.2),
         Font::default(),
