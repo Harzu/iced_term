@@ -179,17 +179,12 @@ impl Term {
             iced::mouse::Event::WheelScrolled { delta } => match delta {
                 ScrollDelta::Lines { x: _, y } => {
                     state.scroll_pixels = 0.0;
-                    let mut lines = -y * 3.0;
-                    lines = if y <= 0.0 {
-                        lines.ceil()
-                    } else {
-                        lines.floor()
-                    };
+                    let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
 
                     println!("Y {}", y);
                     println!("lines {}", lines);
 
-                    Event::Scrolled(self.id, -lines)
+                    Event::Scrolled(self.id, lines)
                 },
                 ScrollDelta::Pixels { x: _, y } => {
                     state.scroll_pixels -= y * 3.0;
