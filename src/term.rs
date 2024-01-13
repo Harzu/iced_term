@@ -175,13 +175,20 @@ impl Term {
         state: &mut TermState,
         event: iced::mouse::Event,
     ) -> Event {
-        println!("{:?}", event);
         match event {
             iced::mouse::Event::WheelScrolled { delta } => match delta {
                 ScrollDelta::Lines { x: _, y } => {
-                    // TODO: check linux
                     state.scroll_pixels = 0.0;
-                    let lines = (-y * 3.0).round();
+                    let mut lines = -y * 3.0;
+                    lines = if y <= 0.0 {
+                        lines.ceil()
+                    } else {
+                        lines.floor()
+                    };
+
+                    println!("Y {}", y);
+                    println!("lines {}", lines);
+
                     Event::Scrolled(self.id, -lines)
                 },
                 ScrollDelta::Pixels { x: _, y } => {
@@ -196,6 +203,10 @@ impl Term {
                         lines += 1;
                         state.scroll_pixels -= line_height;
                     }
+
+                    println!("Y {}", y);
+                    println!("lines {}", lines);
+                    println!("scroll_pixels {}", state.scroll_pixels);
 
                     Event::Scrolled(self.id, -lines as f32)
                 },
