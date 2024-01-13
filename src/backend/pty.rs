@@ -99,8 +99,10 @@ impl Pty {
     }
 
     pub fn scroll(&mut self, delta_value: i32) {
-        let scroll = Scroll::Delta(delta_value);
-        self.term.lock().scroll_display(scroll);
+        if delta_value != 0 {
+            let scroll = Scroll::Delta(delta_value);
+            self.term.lock().scroll_display(scroll);
+        }
     }
 
     pub fn renderable_content(&self) -> Grid<Cell> {

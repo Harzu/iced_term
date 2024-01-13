@@ -12,7 +12,7 @@ use iced::widget::container;
 use iced::{
     Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
 };
-use iced_graphics::core::widget::Tree;
+use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
 use tokio::sync::mpsc::{self, Sender};
@@ -54,6 +54,7 @@ pub struct Term {
     backend_settings: BackendSettings,
     backend: Option<Pty>,
     size: Size<f32>,
+    scroll_state: f32,
 }
 
 impl Term {
@@ -71,6 +72,7 @@ impl Term {
                 width: 0.0,
                 height: 0.0,
             },
+            scroll_state: 0.0,
         }
     }
 
@@ -168,11 +170,35 @@ impl Term {
             .into()
     }
 
-    fn handle_mouse_event(&self, event: iced::mouse::Event) -> Event {
+    fn handle_mouse_event(
+        &self,
+        state: &mut TermState,
+        event: iced::mouse::Event,
+    ) -> Event {
+        println!("{:?}", event);
         match event {
             iced::mouse::Event::WheelScrolled { delta } => match delta {
-                ScrollDelta::Lines { x: _, y } => Event::Scrolled(self.id, y),
-                ScrollDelta::Pixels { x: _, y } => Event::Scrolled(self.id, y),
+                ScrollDelta::Lines { x: _, y } => {
+                    // TODO: check linux
+                    state.scroll_pixels = 0.0;
+                    let lines = (-y * 3.0).round();
+                    Event::Scrolled(self.id, -lines)
+                },
+                ScrollDelta::Pixels { x: _, y } => {
+                    state.scroll_pixels -= y * 3.0;
+                    let mut lines = 0;
+                    let line_height = self.font.measure().height;
+                    while state.scroll_pixels <= -line_height {
+                        lines -= 1;
+                        state.scroll_pixels += line_height;
+                    }
+                    while state.scroll_pixels >= line_height {
+                        lines += 1;
+                        state.scroll_pixels -= line_height;
+                    }
+
+                    Event::Scrolled(self.id, -lines as f32)
+                },
             },
             _ => Event::Ignored(self.id),
         }
@@ -254,6 +280,10 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
 
     fn height(&self) -> Length {
         Length::Fill
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(TermState::new())
     }
 
     fn layout(
@@ -362,7 +392,7 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
 
     fn on_event(
         &mut self,
-        _state: &mut Tree,
+        tree: &mut Tree,
         event: iced::Event,
         _layout: iced_graphics::core::Layout<'_>,
         _cursor: Cursor,
@@ -371,6 +401,7 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         _shell: &mut iced_graphics::core::Shell<'_, Event>,
         _viewport: &Rectangle,
     ) -> iced::event::Status {
+        let state = tree.state.downcast_mut::<TermState>();
         if self.size != _layout.bounds().size() {
             _shell.publish(Event::Resized(self.id(), _layout.bounds().size()));
         }
@@ -381,7 +412,7 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
 
         let term_event = match event {
             iced::Event::Mouse(mouse_event) => {
-                self.handle_mouse_event(mouse_event)
+                self.handle_mouse_event(state, mouse_event)
             },
             iced::Event::Keyboard(keyboard_event) => {
                 self.handle_keyboard_event(keyboard_event)
@@ -402,5 +433,15 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
 impl<'a> From<&'a Term> for Element<'a, Event, iced::Renderer<Theme>> {
     fn from(widget: &'a Term) -> Self {
         Self::new(widget)
+    }
+}
+
+pub struct TermState {
+    scroll_pixels: f32,
+}
+
+impl TermState {
+    pub fn new() -> Self {
+        Self { scroll_pixels: 0.0 }
     }
 }
