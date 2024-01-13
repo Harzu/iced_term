@@ -1,6 +1,7 @@
 use crate::backend::{BackendSettings, Pty};
 use crate::font::TermFont;
-use crate::{font, FontSettings};
+use crate::theme::TermTheme;
+use crate::FontSettings;
 use alacritty_terminal::term::{cell, TermMode};
 use iced::alignment::{Horizontal, Vertical};
 use iced::futures::SinkExt;
@@ -46,6 +47,7 @@ pub struct TermSettings {
 pub struct Term {
     id: u64,
     font: TermFont,
+    theme: TermTheme,
     padding: u16,
     cache: Cache,
     is_focused: bool,
@@ -59,6 +61,7 @@ impl Term {
         Self {
             id,
             font: TermFont::new(settings.font),
+            theme: TermTheme::new(),
             padding: 0,
             is_focused: true,
             cache: Cache::default(),
@@ -82,16 +85,20 @@ impl Term {
             output
                 .send(Event::BackendEventSenderReceived(id, event_tx))
                 .await
-                .unwrap();
+                .unwrap_or_else(|_| {
+                    panic!("ICED SUBSCRIPTION {}: sending BackendEventSenderReceived event is failed", id)
+                });
 
             while let Some(event) = event_rx.recv().await {
                 output
                     .send(Event::BackendEventReceived(id, event))
                     .await
-                    .unwrap();
+                    .unwrap_or_else(|_| {
+                        panic!("ICED SUBSCRIPTION {}: sending BackendEventReceived event is failed", id)
+                    });
             }
 
-            panic!("terminal event channel closed");
+            panic!("ICED SUBSCRIPTION {}: terminal event channel closed unexpected", id);
         })
     }
 
@@ -284,8 +291,8 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
                         + content.display_offset() as f64)
                         * cell_height;
 
-                    let mut fg = font::get_color(indexed.fg);
-                    let mut bg = font::get_color(indexed.bg);
+                    let mut fg = self.theme.get_color(indexed.fg);
+                    let mut bg = self.theme.get_color(indexed.bg);
 
                     if indexed.cell.flags.contains(cell::Flags::INVERSE) {
                         std::mem::swap(&mut fg, &mut bg);
@@ -322,6 +329,10 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
                     }
 
                     if indexed.c != ' ' && indexed.c != '\t' {
+                        if content.cursor.point == indexed.point {
+                            std::mem::swap(&mut fg, &mut bg);
+                        }
+
                         let text = Text {
                             content: indexed.c.to_string(),
                             position: Point {
