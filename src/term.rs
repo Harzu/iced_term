@@ -54,7 +54,6 @@ pub struct Term {
     backend_settings: BackendSettings,
     backend: Option<Pty>,
     size: Size<f32>,
-    scroll_state: f32,
 }
 
 impl Term {
@@ -72,7 +71,6 @@ impl Term {
                 width: 0.0,
                 height: 0.0,
             },
-            scroll_state: 0.0,
         }
     }
 
@@ -180,14 +178,10 @@ impl Term {
                 ScrollDelta::Lines { x: _, y } => {
                     state.scroll_pixels = 0.0;
                     let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-
-                    println!("Y {}", y);
-                    println!("lines {}", lines);
-
                     Event::Scrolled(self.id, lines)
                 },
                 ScrollDelta::Pixels { x: _, y } => {
-                    state.scroll_pixels -= y * 3.0;
+                    state.scroll_pixels -= y;
                     let mut lines = 0;
                     let line_height = self.font.measure().height;
                     while state.scroll_pixels <= -line_height {
@@ -198,10 +192,6 @@ impl Term {
                         lines += 1;
                         state.scroll_pixels -= line_height;
                     }
-
-                    println!("Y {}", y);
-                    println!("lines {}", lines);
-                    println!("scroll_pixels {}", state.scroll_pixels);
 
                     Event::Scrolled(self.id, -lines as f32)
                 },
