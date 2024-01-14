@@ -5,7 +5,7 @@ members = ["examples/*"]
 name = "iced_term"
 description = "Terminal emulator widget powered by ICED framework and alacritty terminal backend."
 authors = ["Ilya Shvyryalkin <ilyashvy@gmail.com>"]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 repository = "https://github.com/Harzu/iced_term"
 categories = ["gui"]
@@ -24,3 +24,4 @@ iced = { version = "0.10.0", features = [
 tokio = { version = "1.23.0", features = ["full"] }
 iced_graphics = "0.9.0"
 iced_tiny_skia = "0.1.0"
+iced_core = "0.10.0"

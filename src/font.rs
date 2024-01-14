@@ -18,6 +18,7 @@ impl Default for FontSettings {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TermFont {
     size: f32,
     font_type: Font,

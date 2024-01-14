@@ -2,6 +2,7 @@ use alacritty_terminal::vte::ansi::{self, NamedColor};
 use iced::Color;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
 pub struct TermTheme {
     ansi256_colors: HashMap<u8, Color>,
 }

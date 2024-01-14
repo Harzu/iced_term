@@ -12,6 +12,7 @@ use iced::widget::container;
 use iced::{
     Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
 };
+use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
@@ -30,8 +31,6 @@ pub enum Event {
 #[derive(Debug, Clone)]
 pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
-    Focus,
-    LostFocus,
     WriteToBackend(Vec<u8>),
     Scroll(i32),
     Resize(Size<f32>),
@@ -50,10 +49,8 @@ pub struct Term {
     theme: TermTheme,
     padding: u16,
     cache: Cache,
-    is_focused: bool,
     backend_settings: BackendSettings,
     backend: Option<Pty>,
-    size: Size<f32>,
 }
 
 impl Term {
@@ -63,23 +60,18 @@ impl Term {
             font: TermFont::new(settings.font),
             theme: TermTheme::new(),
             padding: 0,
-            is_focused: true,
             cache: Cache::default(),
             backend_settings: settings.backend,
             backend: None,
-            size: Size {
-                width: 0.0,
-                height: 0.0,
-            },
         }
     }
 
-    pub fn id(&self) -> u64 {
-        self.id
+    pub fn widget_id(&self) -> iced::widget::text_input::Id {
+        iced::widget::text_input::Id::new(self.id.to_string())
     }
 
     pub fn subscription(&self) -> Subscription<Event> {
-        let id = self.id();
+        let id = self.id;
         iced::subscription::channel(id, 100, move |mut output| async move {
             let (event_tx, mut event_rx) = mpsc::channel(100);
             output
@@ -110,13 +102,7 @@ impl Term {
                         .unwrap_or_else(|_| {
                             panic!("init pty with ID: {} is failed", self.id);
                         }),
-                )
-            },
-            Command::Focus => {
-                self.is_focused = true;
-            },
-            Command::LostFocus => {
-                self.is_focused = false;
+                );
             },
             Command::ProcessBackendEvent(event) => {
                 if let alacritty_terminal::event::Event::Wakeup = event {
@@ -153,106 +139,23 @@ impl Term {
                         self.font.measure().height,
                     );
                     self.cache.clear();
-                    self.size = size;
                 }
             },
         }
     }
+}
 
-    pub fn view(&self) -> Element<Event> {
-        container(self)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(self.padding)
-            .style(iced::theme::Container::Custom(Box::new(Style)))
-            .into()
-    }
+pub struct TermView<'a> {
+    term: &'a Term,
+}
 
-    fn handle_mouse_event(
-        &self,
-        state: &mut TermState,
-        event: iced::mouse::Event,
-    ) -> Event {
-        match event {
-            iced::mouse::Event::WheelScrolled { delta } => match delta {
-                ScrollDelta::Lines { x: _, y } => {
-                    state.scroll_pixels = 0.0;
-                    let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-                    Event::Scrolled(self.id, lines)
-                },
-                ScrollDelta::Pixels { x: _, y } => {
-                    state.scroll_pixels -= y;
-                    let mut lines = 0;
-                    let line_height = self.font.measure().height;
-                    while state.scroll_pixels <= -line_height {
-                        lines -= 1;
-                        state.scroll_pixels += line_height;
-                    }
-                    while state.scroll_pixels >= line_height {
-                        lines += 1;
-                        state.scroll_pixels -= line_height;
-                    }
-
-                    Event::Scrolled(self.id, -lines as f32)
-                },
-            },
-            _ => Event::Ignored(self.id),
-        }
-    }
-
-    fn handle_keyboard_event(&self, event: iced::keyboard::Event) -> Event {
-        match event {
-            iced::keyboard::Event::CharacterReceived(c) => {
-                Event::InputReceived(self.id, [c as u8].to_vec())
-            },
-            iced::keyboard::Event::KeyPressed {
-                key_code,
-                modifiers: _,
-            } => {
-                let mut is_app_cursor_mode = false;
-                if let Some(ref backend) = self.backend {
-                    is_app_cursor_mode = backend.is_mode(TermMode::APP_CURSOR);
-                }
-
-                match key_code {
-                    KeyCode::Up => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOA"
-                        } else {
-                            b"\x1B[A"
-                        };
-                        Event::InputReceived(self.id, code.to_vec())
-                    },
-                    KeyCode::Down => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOB"
-                        } else {
-                            b"\x1B[B"
-                        };
-                        Event::InputReceived(self.id, code.to_vec())
-                    },
-                    KeyCode::Right => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOC"
-                        } else {
-                            b"\x1B[C"
-                        };
-                        Event::InputReceived(self.id, code.to_vec())
-                    },
-                    KeyCode::Left => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOD"
-                        } else {
-                            b"\x1B[D"
-                        };
-                        Event::InputReceived(self.id, code.to_vec())
-                    },
-                    _ => Event::Ignored(self.id),
-                }
-            },
-            _ => Event::Ignored(self.id),
-        }
-    }
+pub fn term_view(term: &Term) -> Element<'_, Event> {
+    container(TermView::new(term))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(term.padding)
+        .style(iced::theme::Container::Custom(Box::new(Style)))
+        .into()
 }
 
 #[derive(Default)]
@@ -269,7 +172,105 @@ impl container::StyleSheet for Style {
     }
 }
 
-impl Widget<Event, iced::Renderer<Theme>> for &Term {
+impl<'a> TermView<'a> {
+    fn new(term: &'a Term) -> Self {
+        Self { term }
+    }
+
+    pub fn focus<Message: 'static>(
+        id: iced::widget::text_input::Id,
+    ) -> iced::Command<Message> {
+        iced::widget::text_input::focus(id)
+    }
+
+    fn handle_mouse_event(
+        &self,
+        state: &mut TermViewState,
+        event: iced::mouse::Event,
+    ) -> Event {
+        match event {
+            iced::mouse::Event::WheelScrolled { delta } => match delta {
+                ScrollDelta::Lines { x: _, y } => {
+                    state.scroll_pixels = 0.0;
+                    let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
+                    Event::Scrolled(self.term.id, lines)
+                },
+                ScrollDelta::Pixels { x: _, y } => {
+                    state.scroll_pixels -= y;
+                    let mut lines = 0;
+                    let line_height = self.term.font.measure().height;
+                    while state.scroll_pixels <= -line_height {
+                        lines -= 1;
+                        state.scroll_pixels += line_height;
+                    }
+                    while state.scroll_pixels >= line_height {
+                        lines += 1;
+                        state.scroll_pixels -= line_height;
+                    }
+
+                    Event::Scrolled(self.term.id, -lines as f32)
+                },
+            },
+            _ => Event::Ignored(self.term.id),
+        }
+    }
+
+    fn handle_keyboard_event(&self, event: iced::keyboard::Event) -> Event {
+        match event {
+            iced::keyboard::Event::CharacterReceived(c) => {
+                Event::InputReceived(self.term.id, [c as u8].to_vec())
+            },
+            iced::keyboard::Event::KeyPressed {
+                key_code,
+                modifiers: _,
+            } => {
+                let mut is_app_cursor_mode = false;
+                if let Some(ref backend) = self.term.backend {
+                    is_app_cursor_mode = backend.is_mode(TermMode::APP_CURSOR);
+                }
+
+                match key_code {
+                    KeyCode::Up => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOA"
+                        } else {
+                            b"\x1B[A"
+                        };
+                        Event::InputReceived(self.term.id, code.to_vec())
+                    },
+                    KeyCode::Down => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOB"
+                        } else {
+                            b"\x1B[B"
+                        };
+                        Event::InputReceived(self.term.id, code.to_vec())
+                    },
+                    KeyCode::Right => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOC"
+                        } else {
+                            b"\x1B[C"
+                        };
+                        Event::InputReceived(self.term.id, code.to_vec())
+                    },
+                    KeyCode::Left => {
+                        let code = if is_app_cursor_mode {
+                            b"\x1BOD"
+                        } else {
+                            b"\x1B[D"
+                        };
+                        Event::InputReceived(self.term.id, code.to_vec())
+                    },
+                    _ => Event::Ignored(self.term.id),
+                }
+            },
+            _ => Event::Ignored(self.term.id),
+        }
+    }
+}
+
+impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
     fn width(&self) -> Length {
         Length::Fill
     }
@@ -278,8 +279,12 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         Length::Fill
     }
 
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<TermViewState>()
+    }
+
     fn state(&self) -> tree::State {
-        tree::State::new(TermState::new())
+        tree::State::new(TermViewState::new())
     }
 
     fn layout(
@@ -295,9 +300,21 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         iced::advanced::layout::Node::new(size)
     }
 
+    fn operate(
+        &self,
+        tree: &mut Tree,
+        _layout: iced_core::Layout<'_>,
+        _renderer: &iced::Renderer<Theme>,
+        operation: &mut dyn operation::Operation<Event>,
+    ) {
+        let state = tree.state.downcast_mut::<TermViewState>();
+        let wid = iced_core::widget::Id::from(self.term.widget_id());
+        operation.focusable(state, Some(&wid));
+    }
+
     fn draw(
         &self,
-        _state: &Tree,
+        _tree: &Tree,
         renderer: &mut iced::Renderer<Theme>,
         _theme: &Theme,
         _style: &iced::advanced::renderer::Style,
@@ -305,20 +322,20 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        let geom = self.cache.draw(renderer, viewport.size(), |frame| {
-            if let Some(ref backend) = self.backend {
+        let geom = self.term.cache.draw(renderer, viewport.size(), |frame| {
+            if let Some(ref backend) = self.term.backend {
                 let content = backend.renderable_content();
                 for indexed in content.display_iter() {
-                    let cell_width = self.font.measure().width as f64;
-                    let cell_height = self.font.measure().height as f64;
+                    let cell_width = self.term.font.measure().width as f64;
+                    let cell_height = self.term.font.measure().height as f64;
 
                     let x = indexed.point.column.0 as f64 * cell_width;
                     let y = (indexed.point.line.0 as f64
                         + content.display_offset() as f64)
                         * cell_height;
 
-                    let mut fg = self.theme.get_color(indexed.fg);
-                    let mut bg = self.theme.get_color(indexed.bg);
+                    let mut fg = self.term.theme.get_color(indexed.fg);
+                    let mut bg = self.term.theme.get_color(indexed.bg);
 
                     if indexed.cell.flags.contains(cell::Flags::INVERSE) {
                         std::mem::swap(&mut fg, &mut bg);
@@ -369,8 +386,8 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
                                     + y as f32
                                     + size.height / 2.0,
                             },
-                            font: self.font.font_type(),
-                            size: self.font.size(),
+                            font: self.term.font.font_type(),
+                            size: self.term.font.size(),
                             color: fg,
                             horizontal_alignment: Horizontal::Center,
                             vertical_alignment: Vertical::Center,
@@ -390,19 +407,21 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
         &mut self,
         tree: &mut Tree,
         event: iced::Event,
-        _layout: iced_graphics::core::Layout<'_>,
+        layout: iced_graphics::core::Layout<'_>,
         _cursor: Cursor,
         _renderer: &iced::Renderer<Theme>,
         _clipboard: &mut dyn iced_graphics::core::Clipboard,
-        _shell: &mut iced_graphics::core::Shell<'_, Event>,
+        shell: &mut iced_graphics::core::Shell<'_, Event>,
         _viewport: &Rectangle,
     ) -> iced::event::Status {
-        let state = tree.state.downcast_mut::<TermState>();
-        if self.size != _layout.bounds().size() {
-            _shell.publish(Event::Resized(self.id(), _layout.bounds().size()));
+        let state = tree.state.downcast_mut::<TermViewState>();
+        let layout_size = layout.bounds().size();
+        if state.size != layout_size && self.term.backend.is_some() {
+            state.size = layout_size;
+            shell.publish(Event::Resized(self.term.id, layout_size));
         }
 
-        if !self.is_focused {
+        if !state.is_focused {
             return iced::event::Status::Ignored;
         }
 
@@ -413,31 +432,58 @@ impl Widget<Event, iced::Renderer<Theme>> for &Term {
             iced::Event::Keyboard(keyboard_event) => {
                 self.handle_keyboard_event(keyboard_event)
             },
-            _ => Event::Ignored(self.id),
+            _ => Event::Ignored(self.term.id),
         };
 
         match term_event {
             Event::Ignored(_) => iced::event::Status::Ignored,
             e => {
-                _shell.publish(e);
+                shell.publish(e);
                 iced::event::Status::Captured
             },
         }
     }
 }
 
-impl<'a> From<&'a Term> for Element<'a, Event, iced::Renderer<Theme>> {
-    fn from(widget: &'a Term) -> Self {
+impl<'a> From<TermView<'a>> for Element<'a, Event, iced::Renderer<Theme>> {
+    fn from(widget: TermView<'a>) -> Self {
         Self::new(widget)
     }
 }
 
-pub struct TermState {
+#[derive(Debug, Clone)]
+pub struct TermViewState {
+    is_focused: bool,
     scroll_pixels: f32,
+    size: Size<f32>,
 }
 
-impl TermState {
+impl TermViewState {
     pub fn new() -> Self {
-        Self { scroll_pixels: 0.0 }
+        Self {
+            is_focused: true,
+            scroll_pixels: 0.0,
+            size: Size::from([0.0, 0.0]),
+        }
+    }
+}
+
+impl Default for TermViewState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl operation::Focusable for TermViewState {
+    fn is_focused(&self) -> bool {
+        self.is_focused
+    }
+
+    fn focus(&mut self) {
+        self.is_focused = true;
+    }
+
+    fn unfocus(&mut self) {
+        self.is_focused = false;
     }
 }

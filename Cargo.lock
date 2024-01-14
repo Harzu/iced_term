@@ -1201,10 +1201,11 @@ dependencies = [
 
 [[package]]
 name = "iced_term"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alacritty_terminal",
  "iced",
+ "iced_core",
  "iced_graphics",
  "iced_tiny_skia",
  "tokio",
