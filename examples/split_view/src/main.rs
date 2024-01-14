@@ -1,3 +1,4 @@
+use iced::advanced::widget::operation::{self, scope};
 use iced::executor;
 use iced::font::{Family, Stretch, Weight};
 use iced::theme::{self, Theme};
@@ -8,6 +9,7 @@ use iced::{
     window, Application, Color, Command, Element, Length, Settings,
     Subscription,
 };
+use iced_term::{term_view, Term, TermViewState};
 use std::collections::HashMap;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
@@ -104,34 +106,23 @@ impl Application for Example {
                     self.panes_created as u64,
                     self.term_settings.clone(),
                 );
+                let command = Term::focus(tab.widget_id());
                 self.tabs.insert(self.panes_created as u64, tab);
 
                 if let Some((pane, _)) = result {
-                    let prev_focused_tab_id = (self.panes_created - 1) as u64;
-                    if let Some(prev_focused_tab) =
-                        self.tabs.get_mut(&prev_focused_tab_id)
-                    {
-                        prev_focused_tab.update(iced_term::Command::LostFocus);
-                    }
                     self.focus = Some(pane);
                 }
 
                 self.panes_created += 1;
+                return command;
             },
             Message::Clicked(pane) => {
-                if let Some(pane_id) = &self.focus {
-                    let focused_pane = self.panes.get(pane_id).unwrap();
-                    let prev_focused_tab =
-                        self.tabs.get_mut(&(focused_pane.id as u64)).unwrap();
-                    prev_focused_tab.update(iced_term::Command::LostFocus);
-                }
-
                 let new_focused_pane = self.panes.get(&pane).unwrap();
                 let new_focused_tab =
                     self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
-                new_focused_tab.update(iced_term::Command::Focus);
 
                 self.focus = Some(pane);
+                return Term::focus(new_focused_tab.widget_id());
             },
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(&split, ratio);
@@ -274,9 +265,7 @@ fn view_content(
     tabs: &HashMap<u64, iced_term::Term>,
 ) -> Element<'_, Message> {
     let tab = tabs.get(&pane_id).expect("tab with target id not found");
-    let tab_view = tab.view().map(Message::IcedTermEvent);
-
-    container(tab_view)
+    container(term_view(tab).map(Message::IcedTermEvent))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(5)

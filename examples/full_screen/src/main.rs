@@ -5,7 +5,7 @@ use iced::{
     executor, window, Application, Command, Font, Length, Settings,
     Subscription, Theme,
 };
-use iced_term;
+use iced_term::{self, term_view};
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
     include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
@@ -110,9 +110,7 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<Message, iced::Renderer> {
-        let tab_view = self.term.view().map(Message::IcedTermEvent);
-
-        container(tab_view)
+        container(term_view(&self.term).map(Message::IcedTermEvent))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

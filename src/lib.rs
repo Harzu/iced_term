@@ -5,4 +5,6 @@ mod theme;
 
 pub use backend::BackendSettings;
 pub use font::FontSettings;
-pub use term::{Command, Event, Term, TermSettings};
+pub use term::{
+    term_view, Command, Event, Term, TermSettings, TermView, TermViewState,
+};
