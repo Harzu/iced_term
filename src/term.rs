@@ -31,8 +31,6 @@ pub enum Event {
 #[derive(Debug, Clone)]
 pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
-    Focus,
-    LostFocus,
     WriteToBackend(Vec<u8>),
     Scroll(i32),
     Resize(Size<f32>),
@@ -51,10 +49,8 @@ pub struct Term {
     theme: TermTheme,
     padding: u16,
     cache: Cache,
-    is_focused: bool,
     backend_settings: BackendSettings,
     backend: Option<Pty>,
-    size: Size<f32>,
 }
 
 impl Term {
@@ -64,22 +60,10 @@ impl Term {
             font: TermFont::new(settings.font),
             theme: TermTheme::new(),
             padding: 0,
-            is_focused: true,
             cache: Cache::default(),
             backend_settings: settings.backend,
             backend: None,
-            size: Size::from([0.0, 0.0]),
         }
-    }
-
-    pub fn id(&self) -> u64 {
-        self.id
-    }
-
-    pub fn focus<Message: 'static>(
-        id: iced::widget::text_input::Id,
-    ) -> iced::Command<Message> {
-        return iced::widget::text_input::focus(id);
     }
 
     pub fn widget_id(&self) -> iced::widget::text_input::Id {
@@ -118,15 +102,7 @@ impl Term {
                         .unwrap_or_else(|_| {
                             panic!("init pty with ID: {} is failed", self.id);
                         }),
-                )
-            },
-            Command::Focus => {
-                self.is_focused = true;
-                // self.cache.clear();
-            },
-            Command::LostFocus => {
-                self.is_focused = false;
-                // self.cache.clear();
+                );
             },
             Command::ProcessBackendEvent(event) => {
                 if let alacritty_terminal::event::Event::Wakeup = event {
@@ -163,7 +139,6 @@ impl Term {
                         self.font.measure().height,
                     );
                     self.cache.clear();
-                    self.size = size;
                 }
             },
         }
@@ -174,7 +149,7 @@ pub struct TermView<'a> {
     term: &'a Term,
 }
 
-pub fn term_view<'a>(term: &'a Term) -> Element<Event> {
+pub fn term_view(term: &Term) -> Element<'_, Event> {
     container(TermView::new(term))
         .width(Length::Fill)
         .height(Length::Fill)
@@ -183,9 +158,29 @@ pub fn term_view<'a>(term: &'a Term) -> Element<Event> {
         .into()
 }
 
+#[derive(Default)]
+struct Style;
+
+impl container::StyleSheet for Style {
+    type Style = Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
+        container::Appearance {
+            background: Some(Color::from_rgb8(40, 39, 39).into()),
+            ..container::Appearance::default()
+        }
+    }
+}
+
 impl<'a> TermView<'a> {
     fn new(term: &'a Term) -> Self {
         Self { term }
+    }
+
+    pub fn focus<Message: 'static>(
+        id: iced::widget::text_input::Id,
+    ) -> iced::Command<Message> {
+        iced::widget::text_input::focus(id)
     }
 
     fn handle_mouse_event(
@@ -412,7 +407,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         &mut self,
         tree: &mut Tree,
         event: iced::Event,
-        _layout: iced_graphics::core::Layout<'_>,
+        layout: iced_graphics::core::Layout<'_>,
         _cursor: Cursor,
         _renderer: &iced::Renderer<Theme>,
         _clipboard: &mut dyn iced_graphics::core::Clipboard,
@@ -420,9 +415,10 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         _viewport: &Rectangle,
     ) -> iced::event::Status {
         let state = tree.state.downcast_mut::<TermViewState>();
-        if self.term.size != _layout.bounds().size() {
-            shell
-                .publish(Event::Resized(self.term.id, _layout.bounds().size()));
+        let layout_size = layout.bounds().size();
+        if state.size != layout_size && self.term.backend.is_some() {
+            state.size = layout_size;
+            shell.publish(Event::Resized(self.term.id, layout_size));
         }
 
         if !state.is_focused {
@@ -455,18 +451,26 @@ impl<'a> From<TermView<'a>> for Element<'a, Event, iced::Renderer<Theme>> {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct TermViewState {
     is_focused: bool,
     scroll_pixels: f32,
+    size: Size<f32>,
 }
 
 impl TermViewState {
     pub fn new() -> Self {
         Self {
-            is_focused: false,
+            is_focused: true,
             scroll_pixels: 0.0,
+            size: Size::from([0.0, 0.0]),
         }
+    }
+}
+
+impl Default for TermViewState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -481,19 +485,5 @@ impl operation::Focusable for TermViewState {
 
     fn unfocus(&mut self) {
         self.is_focused = false;
-    }
-}
-
-#[derive(Default)]
-struct Style;
-
-impl container::StyleSheet for Style {
-    type Style = Theme;
-
-    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            background: Some(Color::from_rgb8(40, 39, 39).into()),
-            ..container::Appearance::default()
-        }
     }
 }

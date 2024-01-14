@@ -1,4 +1,3 @@
-use iced::advanced::widget::operation::{self, scope};
 use iced::executor;
 use iced::font::{Family, Stretch, Weight};
 use iced::theme::{self, Theme};
@@ -9,7 +8,7 @@ use iced::{
     window, Application, Color, Command, Element, Length, Settings,
     Subscription,
 };
-use iced_term::{term_view, Term, TermViewState};
+use iced_term::{term_view, TermView};
 use std::collections::HashMap;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
@@ -106,7 +105,7 @@ impl Application for Example {
                     self.panes_created as u64,
                     self.term_settings.clone(),
                 );
-                let command = Term::focus(tab.widget_id());
+                let command = TermView::focus(tab.widget_id());
                 self.tabs.insert(self.panes_created as u64, tab);
 
                 if let Some((pane, _)) = result {
@@ -122,7 +121,7 @@ impl Application for Example {
                     self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
 
                 self.focus = Some(pane);
-                return Term::focus(new_focused_tab.widget_id());
+                return TermView::focus(new_focused_tab.widget_id());
             },
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(&split, ratio);
@@ -132,6 +131,13 @@ impl Application for Example {
                     let tab_id = closed_pane.id as u64;
                     self.tabs.remove(&tab_id);
                     self.focus = Some(sibling);
+
+                    let new_focused_pane = self.panes.get(&sibling).unwrap();
+                    let new_focused_tab = self
+                        .tabs
+                        .get_mut(&(new_focused_pane.id as u64))
+                        .unwrap();
+                    return TermView::focus(new_focused_tab.widget_id());
                 }
             },
             Message::IcedTermEvent(event) => {

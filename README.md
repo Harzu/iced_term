@@ -28,13 +28,14 @@ The widget is currently under development and does not provide full terminal fea
 - Basic keyboard input
 - Resizing
 - Scrolling
+- Focusing
 
 This widget tested on MacOS and Linux and is not tested on Windows.
 
 ## Installation
 
 ```toml
-iced_term = "0.1.0"
+iced_term = "0.2.0"
 ```
 
 ## Overview
@@ -47,8 +48,6 @@ Interacting with the widget is happened via:
 #[derive(Debug, Clone)]
 pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
-    Focus,
-    LostFocus,
     WriteToBackend(Vec<u8>),
     Scroll(i32),
     Resize(Size<f32>),
