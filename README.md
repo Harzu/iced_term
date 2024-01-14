@@ -176,11 +176,7 @@ Add view to your application
 impl Application for App {
     // ... other methods
     fn view(&self) -> Element<Message, iced::Renderer> {
-        let tab_view = self.term
-            .view()
-            .map(Message::IcedTermEvent);
-
-        container(tab_view)
+        container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
