@@ -113,7 +113,7 @@ impl Pty {
 
 impl Drop for Pty {
     fn drop(&mut self) {
-        self.notifier
+        let _ = self.notifier
             .0
             .send(alacritty_terminal::event_loop::Msg::Shutdown);
     }

@@ -67,9 +67,9 @@ dependencies = [
 
 [[package]]
 name = "alacritty_terminal"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6121a8d385a114873632d785a99614ae1d324b3e38b9da8a92138c8799b50fdc"
+checksum = "35229555d7cc7e83392dfc27c96bec560b1076d756184893296cd60125f4a264"
 dependencies = [
  "base64",
  "bitflags 2.4.1",
@@ -1201,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "iced_term"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "alacritty_terminal",
  "iced",
