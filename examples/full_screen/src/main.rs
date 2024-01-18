@@ -3,7 +3,7 @@ use iced::font::{Family, Stretch, Weight};
 use iced::widget::container;
 use iced::{
     executor, window, Application, Command, Font, Length, Settings,
-    Subscription, Theme,
+    Subscription, Theme, subscription,
 };
 use iced_term;
 
@@ -110,9 +110,14 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<Message, iced::Renderer> {
-        container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        container(
+            iced_term::term_view(
+                &self.term,
+            )
+            .map(Message::IcedTermEvent),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 }

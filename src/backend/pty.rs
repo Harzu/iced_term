@@ -7,6 +7,7 @@ use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::Cell;
 use alacritty_terminal::term::{test::TermSize, TermMode};
 use alacritty_terminal::Grid;
+use alacritty_terminal::vte::ansi::Handler;
 use std::borrow::Cow;
 use std::io::Result;
 use std::sync::Arc;
@@ -70,6 +71,10 @@ impl Pty {
         self.term.lock().mode().contains(mode)
     }
 
+    // pub fn copy_to_clipboard(&self) {
+    //     self.term.lock_unfair().clipboard_store(_, _)
+    // }
+
     pub fn resize(
         &mut self,
         rows: u16,
@@ -113,7 +118,8 @@ impl Pty {
 
 impl Drop for Pty {
     fn drop(&mut self) {
-        let _ = self.notifier
+        let _ = self
+            .notifier
             .0
             .send(alacritty_terminal::event_loop::Msg::Shutdown);
     }
