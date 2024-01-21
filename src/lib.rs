@@ -1,6 +1,6 @@
 mod backend;
 mod font;
-mod keyboard;
+mod bindings;
 mod term;
 mod theme;
 

@@ -1,6 +1,6 @@
 use crate::backend::{BackendSettings, Pty};
 use crate::font::TermFont;
-use crate::keyboard::{BindingAction, KeyboardShortcatsLayout};
+use crate::bindings::{BindingAction, InputKind, BindingsLayout};
 use crate::theme::TermTheme;
 use crate::FontSettings;
 use alacritty_terminal::term::{cell, TermMode};
@@ -13,11 +13,12 @@ use iced::{
     clipboard, Color, Element, Length, Point, Rectangle, Size, Subscription,
     Theme,
 };
-use iced_core::keyboard::Modifiers;
+use iced_core::keyboard::{KeyCode, Modifiers};
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
+use iced_winit::runtime::keyboard;
 use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug, Clone)]
@@ -51,7 +52,7 @@ pub struct Term {
     theme: TermTheme,
     padding: u16,
     cache: Cache,
-    shortcats_layout: KeyboardShortcatsLayout,
+    bindings: BindingsLayout,
     backend_settings: BackendSettings,
     backend: Option<Pty>,
 }
@@ -63,7 +64,7 @@ impl Term {
             font: TermFont::new(settings.font),
             theme: TermTheme::new(),
             padding: 0,
-            shortcats_layout: KeyboardShortcatsLayout::new(),
+            bindings: BindingsLayout::new(),
             cache: Cache::default(),
             backend_settings: settings.backend,
             backend: None,
@@ -142,7 +143,6 @@ impl Term {
                         self.font.measure().width,
                         self.font.measure().height,
                     );
-                    self.cache.clear();
                 }
             },
         }
@@ -151,11 +151,11 @@ impl Term {
 
 pub struct TermView<'a> {
     term: &'a Term,
-    shortcats_layout: &'a KeyboardShortcatsLayout,
+    bindings: &'a BindingsLayout,
 }
 
 pub fn term_view(term: &Term) -> Element<'_, Event> {
-    container(TermView::new(term, &term.shortcats_layout))
+    container(TermView::new(term, &term.bindings))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(term.padding)
@@ -180,11 +180,11 @@ impl container::StyleSheet for Style {
 impl<'a> TermView<'a> {
     fn new(
         term: &'a Term,
-        shortcats_layout: &'a KeyboardShortcatsLayout,
+        bindings: &'a BindingsLayout,
     ) -> Self {
         Self {
             term,
-            shortcats_layout,
+            bindings,
         }
     }
 
@@ -232,74 +232,94 @@ impl<'a> TermView<'a> {
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         event: iced::keyboard::Event,
     ) -> Event {
-        let mut is_app_cursor_mode = false;
         if let Some(ref backend) = self.term.backend {
-            is_app_cursor_mode = backend.is_mode(TermMode::APP_CURSOR);
-        }
+            let mut binding_action = BindingAction::Ignore;
 
-        let mut term_event = Event::Ignored(self.term.id);
-        match event {
-            iced::keyboard::Event::ModifiersChanged(m) => {
-                state.keyboard_modifiers = m;
-            },
-            iced::keyboard::Event::CharacterReceived(c) => {
-                match (
-                    state.keyboard_modifiers.logo(),
-                    state.keyboard_modifiers.alt(),
-                    state.keyboard_modifiers.control(),
-                    state.keyboard_modifiers.shift(),
-                ) {
-                    (false, false, false, _) => {
-                        if !c.is_control() {
-                            let mut buf = [0, 0, 0, 0];
-                            let str = c.encode_utf8(&mut buf);
-                            term_event = Event::InputReceived(
-                                self.term.id,
-                                str.as_bytes().to_vec(),
-                            )
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            iced::keyboard::Event::KeyPressed {
-                key_code,
-                modifiers,
-            } => {
-                if let Some(ref backend) = self.term.backend {
-                    match self
-                        .shortcats_layout
-                        .get_action(key_code, modifiers, backend.mode())
-                    {
-                        BindingAction::Char(c) => {
-                            let mut buf = [0, 0, 0, 0];
-                            let str = c.encode_utf8(&mut buf);
-                            term_event = Event::InputReceived(
-                                self.term.id,
-                                str.as_bytes().to_vec(),
-                            )
-                        },
-                        BindingAction::ESC(seq) => {
-                            term_event = Event::InputReceived(
-                                self.term.id,
-                                seq.as_bytes().to_vec(),
-                            );
-                        },
-                        BindingAction::Paste => {
-                            if let Some(data) = clipboard.read() {
-                                let input: Vec<u8> = data.bytes().collect();
-                                term_event =
-                                    Event::InputReceived(self.term.id, input);
+            match event {
+                iced::keyboard::Event::ModifiersChanged(m) => {
+                    state.keyboard_modifiers = m;
+                },
+                iced::keyboard::Event::CharacterReceived(c) => {
+                    match (
+                        state.keyboard_modifiers.logo(),
+                        state.keyboard_modifiers.alt(),
+                        state.keyboard_modifiers.control(),
+                        state.keyboard_modifiers.shift(),
+                    ) {
+                        // Handle only printable chars (non-controls)
+                        (false, false, false, _) => {
+                            if !c.is_control() {
+                                let mut buf = [0, 0, 0, 0];
+                                let str = c.encode_utf8(&mut buf);
+                                return Event::InputReceived(
+                                    self.term.id,
+                                    str.as_bytes().to_vec(),
+                                )
                             }
                         },
-                        _ => {},
-                    };
-                }
-            },
-            _ => {},
+                        _ => {
+                            binding_action = self.bindings.get_action(
+                                InputKind::Char(c),
+                                state.keyboard_modifiers,
+                                backend.mode(),
+                            );
+
+                            // If binding's action not found in this event kind
+                            // input char will be passed to backend.
+                            // A lot of default control characters and mappings will be processed here
+                            // and you can overwrite any of them if it is need
+                            if binding_action == BindingAction::Ignore {
+                                let mut buf = [0, 0, 0, 0];
+                                let str = c.encode_utf8(&mut buf);
+                                return Event::InputReceived(
+                                    self.term.id,
+                                    str.as_bytes().to_vec(),
+                                )
+                            }
+                        },
+                    }
+                },
+                iced::keyboard::Event::KeyPressed {
+                    key_code,
+                    modifiers,
+                } => {
+                    binding_action = self.bindings.get_action(
+                        InputKind::KeyCode(key_code),
+                        modifiers,
+                        backend.mode(),
+                    );
+                },
+                _ => {},
+            }
+
+            println!("{:?}", binding_action);
+
+            match binding_action {
+                BindingAction::Char(c) => {
+                    let mut buf = [0, 0, 0, 0];
+                    let str = c.encode_utf8(&mut buf);
+                    return Event::InputReceived(
+                        self.term.id,
+                        str.as_bytes().to_vec(),
+                    )
+                },
+                BindingAction::ESC(seq) => {
+                    return Event::InputReceived(
+                        self.term.id,
+                        seq.as_bytes().to_vec(),
+                    )
+                },
+                BindingAction::Paste => {
+                    if let Some(data) = clipboard.read() {
+                        let input: Vec<u8> = data.bytes().collect();
+                        return Event::InputReceived(self.term.id, input);
+                    }
+                },
+                _ => {},
+            };
         }
 
-        term_event
+        Event::Ignored(self.term.id)
     }
 }
 
