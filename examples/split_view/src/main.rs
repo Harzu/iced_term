@@ -272,8 +272,7 @@ fn view_content(
 ) -> Element<'_, Message> {
     let tab = tabs.get(&pane_id).expect("tab with target id not found");
     container(
-        term_view(tab, iced_term::DefaultKeyboardLayout)
-            .map(Message::IcedTermEvent),
+        term_view(tab).map(Message::IcedTermEvent),
     )
     .width(Length::Fill)
     .height(Length::Fill)

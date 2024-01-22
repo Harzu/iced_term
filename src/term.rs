@@ -240,43 +240,32 @@ impl<'a> TermView<'a> {
                     state.keyboard_modifiers = m;
                 },
                 iced::keyboard::Event::CharacterReceived(c) => {
-                    match (
-                        state.keyboard_modifiers.logo(),
-                        state.keyboard_modifiers.alt(),
-                        state.keyboard_modifiers.control(),
-                        state.keyboard_modifiers.shift(),
-                    ) {
-                        // Handle only printable chars (non-controls)
-                        (false, false, false, _) => {
-                            if !c.is_control() {
-                                let mut buf = [0, 0, 0, 0];
-                                let str = c.encode_utf8(&mut buf);
-                                return Event::InputReceived(
-                                    self.term.id,
-                                    str.as_bytes().to_vec(),
-                                )
-                            }
-                        },
-                        _ => {
-                            binding_action = self.bindings.get_action(
-                                InputKind::Char(c),
-                                state.keyboard_modifiers,
-                                backend.mode(),
-                            );
+                    if !c.is_control() {
+                        let mut buf = [0, 0, 0, 0];
+                        let str = c.encode_utf8(&mut buf);
+                        return Event::InputReceived(
+                            self.term.id,
+                            str.as_bytes().to_vec(),
+                        )
+                    }
 
-                            // If binding's action not found in this event kind
-                            // input char will be passed to backend.
-                            // A lot of default control characters and mappings will be processed here
-                            // and you can overwrite any of them if it is need
-                            if binding_action == BindingAction::Ignore {
-                                let mut buf = [0, 0, 0, 0];
-                                let str = c.encode_utf8(&mut buf);
-                                return Event::InputReceived(
-                                    self.term.id,
-                                    str.as_bytes().to_vec(),
-                                )
-                            }
-                        },
+                    binding_action = self.bindings.get_action(
+                        InputKind::Char(c),
+                        state.keyboard_modifiers,
+                        backend.mode(),
+                    );
+
+                    // If binding's action not found in this event kind
+                    // input char will be passed to backend.
+                    // A lot of default control characters and mappings will be processed here
+                    // and you can overwrite any of them if it is need
+                    if binding_action == BindingAction::Ignore {
+                        let mut buf = [0, 0, 0, 0];
+                        let str = c.encode_utf8(&mut buf);
+                        return Event::InputReceived(
+                            self.term.id,
+                            str.as_bytes().to_vec(),
+                        )
                     }
                 },
                 iced::keyboard::Event::KeyPressed {
@@ -291,8 +280,6 @@ impl<'a> TermView<'a> {
                 },
                 _ => {},
             }
-
-            println!("{:?}", binding_action);
 
             match binding_action {
                 BindingAction::Char(c) => {
