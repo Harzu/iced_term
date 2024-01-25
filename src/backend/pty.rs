@@ -6,7 +6,6 @@ use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::Cell;
 use alacritty_terminal::term::{test::TermSize, TermMode};
-use alacritty_terminal::vte::ansi::Handler;
 use alacritty_terminal::Grid;
 use std::borrow::Cow;
 use std::io::Result;
@@ -74,10 +73,6 @@ impl Pty {
     pub fn mode(&self) -> TermMode {
         self.term.lock().mode().clone()
     }
-
-    // pub fn copy_to_clipboard(&self) {
-    //     self.term.lock_unfair().clipboard_store(_, _)
-    // }
 
     pub fn resize(
         &mut self,
