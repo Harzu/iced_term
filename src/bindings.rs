@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use alacritty_terminal::term::TermMode;
 use iced_core::keyboard::{KeyCode, Modifiers};
 
@@ -22,7 +24,6 @@ pub struct Binding<T> {
     modifiers: Modifiers,
     terminal_mode_include: TermMode,
     terminal_mode_exclude: TermMode,
-    action: BindingAction,
 }
 
 type KeyboardBinding = Binding<InputKind>;
@@ -54,10 +55,9 @@ macro_rules! generate_bindings {
                 modifiers: _input_modifiers,
                 terminal_mode_include: _terminal_mode_include,
                 terminal_mode_exclude: _terminal_mode_exclude,
-                action: $action.into(),
             };
 
-            v.push(binding);
+            v.push((binding, $action.into()));
         )*
 
         v
@@ -75,7 +75,7 @@ macro_rules! input {
 
 #[derive(Clone)]
 pub struct BindingsLayout {
-    layout: Vec<Binding<InputKind>>,
+    layout: Vec<(Binding<InputKind>, BindingAction)>,
 }
 
 impl BindingsLayout {
@@ -85,20 +85,33 @@ impl BindingsLayout {
         Self { layout }
     }
 
+    pub fn add_custom_bindings(
+        &mut self,
+        bindings: Vec<(Binding<InputKind>, BindingAction)>,
+    ) {
+        // let mut layout_bindings = HashSet::new();
+        // for (binding, _) in &self.layout {
+        //     layout_bindings.insert((binding));
+        // }
+        // for (new_binding, action) in bindings {
+        //     // la
+        // }
+    }
+
     pub fn get_action(
         &self,
         input: InputKind,
         modifiers: Modifiers,
         terminal_mode: TermMode,
     ) -> BindingAction {
-        for binding in &self.layout {
+        for (binding, action) in &self.layout {
             let is_trigered = binding.target == input
                 && binding.modifiers == modifiers
                 && terminal_mode.contains(binding.terminal_mode_include)
                 && !terminal_mode.intersects(binding.terminal_mode_exclude);
 
             if is_trigered {
-                return binding.action.clone();
+                return action.clone();
             };
         }
 
@@ -106,58 +119,7 @@ impl BindingsLayout {
     }
 }
 
-pub fn convert_char_to_key_code(c: char) -> Option<KeyCode> {
-    match c.to_ascii_lowercase() {
-        'a' => Some(KeyCode::A),
-        'b' => Some(KeyCode::B),
-        'c' => Some(KeyCode::C),
-        'd' => Some(KeyCode::D),
-        'e' => Some(KeyCode::E),
-        'f' => Some(KeyCode::F),
-        'g' => Some(KeyCode::G),
-        'h' => Some(KeyCode::H),
-        'i' => Some(KeyCode::I),
-        'j' => Some(KeyCode::J),
-        'k' => Some(KeyCode::K),
-        'l' => Some(KeyCode::L),
-        'm' => Some(KeyCode::M),
-        'n' => Some(KeyCode::N),
-        'o' => Some(KeyCode::O),
-        'p' => Some(KeyCode::P),
-        'q' => Some(KeyCode::Q),
-        'r' => Some(KeyCode::R),
-        's' => Some(KeyCode::S),
-        't' => Some(KeyCode::T),
-        'u' => Some(KeyCode::U),
-        'v' => Some(KeyCode::V),
-        'w' => Some(KeyCode::W),
-        'x' => Some(KeyCode::X),
-        'y' => Some(KeyCode::Y),
-        'z' => Some(KeyCode::Z),
-        '0' | ')' => Some(KeyCode::Key0),
-        '1' | '!' => Some(KeyCode::Key1),
-        '2' | '@' => Some(KeyCode::Key2),
-        '3' | '#' => Some(KeyCode::Key3),
-        '4' | '$' => Some(KeyCode::Key4),
-        '5' | '%' => Some(KeyCode::Key5),
-        '6' | '^' => Some(KeyCode::Key6),
-        '7' | '&' => Some(KeyCode::Key7),
-        '8' | '*' => Some(KeyCode::Key8),
-        '9' | '(' => Some(KeyCode::Key9),
-        '-' | '_' => Some(KeyCode::Minus),
-        '=' | '+' => Some(KeyCode::Equals),
-        '[' | '{' => Some(KeyCode::LBracket),
-        ']' | '}' => Some(KeyCode::RBracket),
-        ';' | ':' => Some(KeyCode::Semicolon),
-        '"' | '\'' => Some(KeyCode::Apostrophe),
-        ',' | '<' => Some(KeyCode::Comma),
-        '.' | '>' => Some(KeyCode::Period),
-        '/' | '?' => Some(KeyCode::Slash),
-        _ => None,
-    }
-}
-
-pub fn default_keyboard_bindings() -> Vec<Binding<InputKind>> {
+pub fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         KeyboardBinding;
         // ANY
@@ -344,17 +306,16 @@ pub fn default_keyboard_bindings() -> Vec<Binding<InputKind>> {
 }
 
 #[cfg(target_os = "macos")]
-fn platform_keyboard_bindings() -> Vec<Binding<InputKind>> {
+fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         KeyboardBinding;
         C, Modifiers::COMMAND; BindingAction::Copy;
         V, Modifiers::COMMAND; BindingAction::Paste;
-        Equals, Modifiers::SHIFT; BindingAction::Char('A');
     )
 }
 
 #[cfg(target_os = "linux")]
-fn platform_keyboard_bindings() -> Vec<Binding<InputKind>> {
+fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         KeyboardBinding;
         C, Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Copy;

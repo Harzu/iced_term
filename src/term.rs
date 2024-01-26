@@ -1,7 +1,5 @@
 use crate::backend::{BackendSettings, Pty};
-use crate::bindings::{
-    convert_char_to_key_code, BindingAction, BindingsLayout, InputKind,
-};
+use crate::bindings::{BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::theme::TermTheme;
 use crate::FontSettings;
@@ -229,16 +227,24 @@ impl<'a> TermView<'a> {
         if let Some(ref backend) = self.term.backend {
             let mut binding_action = BindingAction::Ignore;
 
-            println!("{:?}", event);
-
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
                     state.keyboard_modifiers = m;
                 },
                 iced::keyboard::Event::CharacterReceived(c) => {
-                    // println!("{:?}", convert_char_to_key_code(c));
+                    binding_action = self.bindings.get_action(
+                        InputKind::Char(c.to_ascii_lowercase()),
+                        state.keyboard_modifiers,
+                        backend.mode(),
+                    );
 
-                    if !c.is_control() {
+                    // If binding's action not found in this event kind
+                    // input char will be passed to backend.
+                    // A lot of default control characters and mappings will be processed here
+                    // and you can overwrite any of them if it is need
+                    if binding_action == BindingAction::Ignore
+                        && !c.is_control()
+                    {
                         let mut buf = [0, 0, 0, 0];
                         let str = c.encode_utf8(&mut buf);
                         return Event::InputReceived(
@@ -247,23 +253,13 @@ impl<'a> TermView<'a> {
                         );
                     }
 
-                    // binding_action = self.bindings.get_action(
-                    //     InputKind::Char(c),
-                    //     state.keyboard_modifiers,
-                    //     backend.mode(),
-                    // );
-
-                    // If binding's action not found in this event kind
-                    // input char will be passed to backend.
-                    // A lot of default control characters and mappings will be processed here
-                    // and you can overwrite any of them if it is need
-                    // if binding_action == BindingAction::Ignore {
+                    // if !c.is_control() {
                     //     let mut buf = [0, 0, 0, 0];
                     //     let str = c.encode_utf8(&mut buf);
                     //     return Event::InputReceived(
                     //         self.term.id,
                     //         str.as_bytes().to_vec(),
-                    //     )
+                    //     );
                     // }
                 },
                 iced::keyboard::Event::KeyPressed {
