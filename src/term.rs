@@ -1,6 +1,8 @@
 use crate::backend::{BackendSettings, Pty};
+use crate::bindings::{
+    convert_char_to_key_code, BindingAction, BindingsLayout, InputKind,
+};
 use crate::font::TermFont;
-use crate::bindings::{BindingAction, InputKind, BindingsLayout};
 use crate::theme::TermTheme;
 use crate::FontSettings;
 use alacritty_terminal::term::{cell, TermMode};
@@ -10,15 +12,13 @@ use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
 use iced::{
-    clipboard, Color, Element, Length, Point, Rectangle, Size, Subscription,
-    Theme,
+    Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
 };
-use iced_core::keyboard::{KeyCode, Modifiers};
+use iced_core::keyboard::Modifiers;
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Renderer;
-use iced_winit::runtime::keyboard;
 use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug, Clone)]
@@ -178,14 +178,8 @@ impl container::StyleSheet for Style {
 }
 
 impl<'a> TermView<'a> {
-    fn new(
-        term: &'a Term,
-        bindings: &'a BindingsLayout,
-    ) -> Self {
-        Self {
-            term,
-            bindings,
-        }
+    fn new(term: &'a Term, bindings: &'a BindingsLayout) -> Self {
+        Self { term, bindings }
     }
 
     pub fn focus<Message: 'static>(
@@ -242,13 +236,15 @@ impl<'a> TermView<'a> {
                     state.keyboard_modifiers = m;
                 },
                 iced::keyboard::Event::CharacterReceived(c) => {
+                    // println!("{:?}", convert_char_to_key_code(c));
+
                     if !c.is_control() {
                         let mut buf = [0, 0, 0, 0];
                         let str = c.encode_utf8(&mut buf);
                         return Event::InputReceived(
                             self.term.id,
                             str.as_bytes().to_vec(),
-                        )
+                        );
                     }
 
                     // binding_action = self.bindings.get_action(
@@ -290,7 +286,7 @@ impl<'a> TermView<'a> {
                     return Event::InputReceived(
                         self.term.id,
                         str.as_bytes().to_vec(),
-                    )
+                    );
                 },
                 BindingAction::ESC(seq) => {
                     return Event::InputReceived(

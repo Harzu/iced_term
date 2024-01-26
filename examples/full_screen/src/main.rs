@@ -2,8 +2,8 @@ use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::container;
 use iced::{
-    executor, subscription, window, Application, Command, Font, Length,
-    Settings, Subscription, Theme,
+    executor, window, Application, Command, Font, Length, Settings,
+    Subscription, Theme,
 };
 use iced_term;
 

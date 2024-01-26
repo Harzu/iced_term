@@ -98,24 +98,62 @@ impl BindingsLayout {
                 && !terminal_mode.intersects(binding.terminal_mode_exclude);
 
             if is_trigered {
-                // println!("");
-                // println!("input {} binding {:?} target {:?}", binding.target == input, binding.target, input);
-                // println!("binding_modifiers {:?}", binding.modifiers);
-                // println!("terminal_mode_include {:?}", binding.terminal_mode_include);
-                // println!("terminal_mode_exclude {:?}", binding.terminal_mode_exclude);
-                // println!("input modifiers {:?}", modifiers);
-                // println!("terminal mode {:?}", terminal_mode);
-                // println!("modifiers match {}", modifiers.contains(binding.modifiers));
-                // println!("terminal_mode_include match {}", terminal_mode.contains(binding.terminal_mode_include));
-                // println!("terminal_mode_exclude match {}", !terminal_mode.intersects(binding.terminal_mode_exclude));
-                // println!("action {:?}", binding.action);
-                // println!("{}", binding.terminal_mode_include.is_empty());
-                // println!("diff {:?}", terminal_mode.difference(binding.terminal_mode_include));
                 return binding.action.clone();
             };
         }
 
         BindingAction::Ignore
+    }
+}
+
+pub fn convert_char_to_key_code(c: char) -> Option<KeyCode> {
+    match c.to_ascii_lowercase() {
+        'a' => Some(KeyCode::A),
+        'b' => Some(KeyCode::B),
+        'c' => Some(KeyCode::C),
+        'd' => Some(KeyCode::D),
+        'e' => Some(KeyCode::E),
+        'f' => Some(KeyCode::F),
+        'g' => Some(KeyCode::G),
+        'h' => Some(KeyCode::H),
+        'i' => Some(KeyCode::I),
+        'j' => Some(KeyCode::J),
+        'k' => Some(KeyCode::K),
+        'l' => Some(KeyCode::L),
+        'm' => Some(KeyCode::M),
+        'n' => Some(KeyCode::N),
+        'o' => Some(KeyCode::O),
+        'p' => Some(KeyCode::P),
+        'q' => Some(KeyCode::Q),
+        'r' => Some(KeyCode::R),
+        's' => Some(KeyCode::S),
+        't' => Some(KeyCode::T),
+        'u' => Some(KeyCode::U),
+        'v' => Some(KeyCode::V),
+        'w' => Some(KeyCode::W),
+        'x' => Some(KeyCode::X),
+        'y' => Some(KeyCode::Y),
+        'z' => Some(KeyCode::Z),
+        '0' | ')' => Some(KeyCode::Key0),
+        '1' | '!' => Some(KeyCode::Key1),
+        '2' | '@' => Some(KeyCode::Key2),
+        '3' | '#' => Some(KeyCode::Key3),
+        '4' | '$' => Some(KeyCode::Key4),
+        '5' | '%' => Some(KeyCode::Key5),
+        '6' | '^' => Some(KeyCode::Key6),
+        '7' | '&' => Some(KeyCode::Key7),
+        '8' | '*' => Some(KeyCode::Key8),
+        '9' | '(' => Some(KeyCode::Key9),
+        '-' | '_' => Some(KeyCode::Minus),
+        '=' | '+' => Some(KeyCode::Equals),
+        '[' | '{' => Some(KeyCode::LBracket),
+        ']' | '}' => Some(KeyCode::RBracket),
+        ';' | ':' => Some(KeyCode::Semicolon),
+        '"' | '\'' => Some(KeyCode::Apostrophe),
+        ',' | '<' => Some(KeyCode::Comma),
+        '.' | '>' => Some(KeyCode::Period),
+        '/' | '?' => Some(KeyCode::Slash),
+        _ => None,
     }
 }
 
@@ -167,59 +205,57 @@ pub fn default_keyboard_bindings() -> Vec<Binding<InputKind>> {
         Left,  +TermMode::APP_CURSOR; BindingAction::ESC("\x1bOD".into());
         Right, +TermMode::APP_CURSOR; BindingAction::ESC("\x1bOC".into());
         // CTRL
-        Up,       Modifiers::CTRL; BindingAction::ESC("\x1b[1;5A".into());
-        Down,     Modifiers::CTRL; BindingAction::ESC("\x1b[1;5B".into());
-        Left,     Modifiers::CTRL; BindingAction::ESC("\x1b[1;5D".into());
-        Right,    Modifiers::CTRL; BindingAction::ESC("\x1b[1;5C".into());
-        End,      Modifiers::CTRL; BindingAction::ESC("\x1b[1;5F".into());
-        Home,     Modifiers::CTRL; BindingAction::ESC("\x1b[1;5H".into());
-        Delete,   Modifiers::CTRL; BindingAction::ESC("\x1b[3;5~".into());
-        PageUp,   Modifiers::CTRL; BindingAction::ESC("\x1b[5;5~".into());
-        PageDown, Modifiers::CTRL; BindingAction::ESC("\x1b[6;5~".into());
-        F1,       Modifiers::CTRL; BindingAction::ESC("\x1bO;5P".into());
-        F2,       Modifiers::CTRL; BindingAction::ESC("\x1bO;5Q".into());
-        F3,       Modifiers::CTRL; BindingAction::ESC("\x1bO;5R".into());
-        F4,       Modifiers::CTRL; BindingAction::ESC("\x1bO;5S".into());
-        F5,       Modifiers::CTRL; BindingAction::ESC("\x1b[15;5~".into());
-        F6,       Modifiers::CTRL; BindingAction::ESC("\x1b[17;5~".into());
-        F7,       Modifiers::CTRL; BindingAction::ESC("\x1b[18;5~".into());
-        F8,       Modifiers::CTRL; BindingAction::ESC("\x1b[19;5~".into());
-        F9,       Modifiers::CTRL; BindingAction::ESC("\x1b[20;5~".into());
-        F10,      Modifiers::CTRL; BindingAction::ESC("\x1b[21;5~".into());
-        F11,      Modifiers::CTRL; BindingAction::ESC("\x1b[23;5~".into());
-        F12,      Modifiers::CTRL; BindingAction::ESC("\x1b[24;5~".into());
-        A,        Modifiers::CTRL; BindingAction::Char('\x01');
-        B,        Modifiers::CTRL; BindingAction::Char('\x02');
-        C,        Modifiers::CTRL; BindingAction::Char('\x03');
-        D,        Modifiers::CTRL; BindingAction::Char('\x04');
-        E,        Modifiers::CTRL; BindingAction::Char('\x05');
-        F,        Modifiers::CTRL; BindingAction::Char('\x06');
-        G,        Modifiers::CTRL; BindingAction::Char('\x07');
-        H,        Modifiers::CTRL; BindingAction::Char('\x08');
-        I,        Modifiers::CTRL; BindingAction::Char('\x09');
-        J,        Modifiers::CTRL; BindingAction::Char('\x0a');
-        K,        Modifiers::CTRL; BindingAction::Char('\x0b');
-        L,        Modifiers::CTRL; BindingAction::Char('\x0c');
-        M,        Modifiers::CTRL; BindingAction::Char('\x0d');
-        N,        Modifiers::CTRL; BindingAction::Char('\x0e');
-        O,        Modifiers::CTRL; BindingAction::Char('\x0f');
-        P,        Modifiers::CTRL; BindingAction::Char('\x10');
-        Q,        Modifiers::CTRL; BindingAction::Char('\x11');
-        R,        Modifiers::CTRL; BindingAction::Char('\x12');
-        S,        Modifiers::CTRL; BindingAction::Char('\x13');
-        T,        Modifiers::CTRL; BindingAction::Char('\x14');
-        U,        Modifiers::CTRL; BindingAction::Char('\x51');
-        V,        Modifiers::CTRL; BindingAction::Char('\x16');
-        W,        Modifiers::CTRL; BindingAction::Char('\x17');
-        X,        Modifiers::CTRL; BindingAction::Char('\x18');
-        Y,        Modifiers::CTRL; BindingAction::Char('\x19');
-        Z,        Modifiers::CTRL; BindingAction::Char('\x1a');
-
+        Up,        Modifiers::COMMAND; BindingAction::ESC("\x1b[1;5A".into());
+        Down,      Modifiers::COMMAND; BindingAction::ESC("\x1b[1;5B".into());
+        Left,      Modifiers::COMMAND; BindingAction::ESC("\x1b[1;5D".into());
+        Right,     Modifiers::COMMAND; BindingAction::ESC("\x1b[1;5C".into());
+        End,       Modifiers::CTRL; BindingAction::ESC("\x1b[1;5F".into());
+        Home,      Modifiers::CTRL; BindingAction::ESC("\x1b[1;5H".into());
+        Delete,    Modifiers::CTRL; BindingAction::ESC("\x1b[3;5~".into());
+        PageUp,    Modifiers::CTRL; BindingAction::ESC("\x1b[5;5~".into());
+        PageDown,  Modifiers::CTRL; BindingAction::ESC("\x1b[6;5~".into());
+        F1,        Modifiers::CTRL; BindingAction::ESC("\x1bO;5P".into());
+        F2,        Modifiers::CTRL; BindingAction::ESC("\x1bO;5Q".into());
+        F3,        Modifiers::CTRL; BindingAction::ESC("\x1bO;5R".into());
+        F4,        Modifiers::CTRL; BindingAction::ESC("\x1bO;5S".into());
+        F5,        Modifiers::CTRL; BindingAction::ESC("\x1b[15;5~".into());
+        F6,        Modifiers::CTRL; BindingAction::ESC("\x1b[17;5~".into());
+        F7,        Modifiers::CTRL; BindingAction::ESC("\x1b[18;5~".into());
+        F8,        Modifiers::CTRL; BindingAction::ESC("\x1b[19;5~".into());
+        F9,        Modifiers::CTRL; BindingAction::ESC("\x1b[20;5~".into());
+        F10,       Modifiers::CTRL; BindingAction::ESC("\x1b[21;5~".into());
+        F11,       Modifiers::CTRL; BindingAction::ESC("\x1b[23;5~".into());
+        F12,       Modifiers::CTRL; BindingAction::ESC("\x1b[24;5~".into());
+        A,         Modifiers::CTRL; BindingAction::Char('\x01');
+        B,         Modifiers::CTRL; BindingAction::Char('\x02');
+        C,         Modifiers::CTRL; BindingAction::Char('\x03');
+        D,         Modifiers::CTRL; BindingAction::Char('\x04');
+        E,         Modifiers::CTRL; BindingAction::Char('\x05');
+        F,         Modifiers::CTRL; BindingAction::Char('\x06');
+        G,         Modifiers::CTRL; BindingAction::Char('\x07');
+        H,         Modifiers::CTRL; BindingAction::Char('\x08');
+        I,         Modifiers::CTRL; BindingAction::Char('\x09');
+        J,         Modifiers::CTRL; BindingAction::Char('\x0a');
+        K,         Modifiers::CTRL; BindingAction::Char('\x0b');
+        L,         Modifiers::CTRL; BindingAction::Char('\x0c');
+        M,         Modifiers::CTRL; BindingAction::Char('\x0d');
+        N,         Modifiers::CTRL; BindingAction::Char('\x0e');
+        O,         Modifiers::CTRL; BindingAction::Char('\x0f');
+        P,         Modifiers::CTRL; BindingAction::Char('\x10');
+        Q,         Modifiers::CTRL; BindingAction::Char('\x11');
+        R,         Modifiers::CTRL; BindingAction::Char('\x12');
+        S,         Modifiers::CTRL; BindingAction::Char('\x13');
+        T,         Modifiers::CTRL; BindingAction::Char('\x14');
+        U,         Modifiers::CTRL; BindingAction::Char('\x51');
+        V,         Modifiers::CTRL; BindingAction::Char('\x16');
+        W,         Modifiers::CTRL; BindingAction::Char('\x17');
+        X,         Modifiers::CTRL; BindingAction::Char('\x18');
+        Y,         Modifiers::CTRL; BindingAction::Char('\x19');
+        Z,         Modifiers::CTRL; BindingAction::Char('\x1a');
         LBracket,  Modifiers::CTRL; BindingAction::Char('\x1b');
         RBracket,  Modifiers::CTRL; BindingAction::Char('\x1d');
         Backslash, Modifiers::CTRL; BindingAction::Char('\x1c');
-        Slash,     Modifiers::CTRL; BindingAction::Char('\x1f');
-        Key2,      Modifiers::CTRL; BindingAction::Char('\x00');
+        Minus,     Modifiers::CTRL; BindingAction::Char('\x1f');
         // SHIFT
         Enter,       Modifiers::SHIFT; BindingAction::Char('\x0d');
         NumpadEnter, Modifiers::SHIFT; BindingAction::Char('\x0d');
@@ -285,6 +321,9 @@ pub fn default_keyboard_bindings() -> Vec<Binding<InputKind>> {
         X,     Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x18');
         Y,     Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x19');
         Z,     Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x1a');
+        Key2,  Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x00');
+        Key6,  Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x1e');
+        Minus, Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x1f');
         // CTRL + ALT
         End,      Modifiers::CTRL | Modifiers::ALT; BindingAction::ESC("\x1b[1;7F".into());
         Home,     Modifiers::CTRL | Modifiers::ALT; BindingAction::ESC("\x1b[1;7H".into());
@@ -308,8 +347,9 @@ pub fn default_keyboard_bindings() -> Vec<Binding<InputKind>> {
 fn platform_keyboard_bindings() -> Vec<Binding<InputKind>> {
     generate_bindings!(
         KeyboardBinding;
-        C, Modifiers::LOGO; BindingAction::Copy;
-        V, Modifiers::LOGO; BindingAction::Paste;
+        C, Modifiers::COMMAND; BindingAction::Copy;
+        V, Modifiers::COMMAND; BindingAction::Paste;
+        Equals, Modifiers::SHIFT; BindingAction::Char('A');
     )
 }
 
@@ -317,7 +357,7 @@ fn platform_keyboard_bindings() -> Vec<Binding<InputKind>> {
 fn platform_keyboard_bindings() -> Vec<Binding<InputKind>> {
     generate_bindings!(
         KeyboardBinding;
-        C, Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Copy;
-        V, Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Paste;
+        C, Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Copy;
+        V, Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Paste;
     )
 }
