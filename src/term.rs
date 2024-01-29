@@ -1,17 +1,18 @@
 use crate::backend::{BackendSettings, Pty};
+use crate::bindings::{BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::theme::TermTheme;
 use crate::FontSettings;
 use alacritty_terminal::term::{cell, TermMode};
 use iced::alignment::{Horizontal, Vertical};
 use iced::futures::SinkExt;
-use iced::keyboard::KeyCode;
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
 use iced::{
     Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
 };
+use iced_core::keyboard::Modifiers;
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
@@ -49,6 +50,7 @@ pub struct Term {
     theme: TermTheme,
     padding: u16,
     cache: Cache,
+    bindings: BindingsLayout,
     backend_settings: BackendSettings,
     backend: Option<Pty>,
 }
@@ -60,6 +62,7 @@ impl Term {
             font: TermFont::new(settings.font),
             theme: TermTheme::new(),
             padding: 0,
+            bindings: BindingsLayout::new(),
             cache: Cache::default(),
             backend_settings: settings.backend,
             backend: None,
@@ -138,7 +141,6 @@ impl Term {
                         self.font.measure().width,
                         self.font.measure().height,
                     );
-                    self.cache.clear();
                 }
             },
         }
@@ -147,10 +149,11 @@ impl Term {
 
 pub struct TermView<'a> {
     term: &'a Term,
+    bindings: &'a BindingsLayout,
 }
 
 pub fn term_view(term: &Term) -> Element<'_, Event> {
-    container(TermView::new(term))
+    container(TermView::new(term, &term.bindings))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(term.padding)
@@ -173,8 +176,8 @@ impl container::StyleSheet for Style {
 }
 
 impl<'a> TermView<'a> {
-    fn new(term: &'a Term) -> Self {
-        Self { term }
+    fn new(term: &'a Term, bindings: &'a BindingsLayout) -> Self {
+        Self { term, bindings }
     }
 
     pub fn focus<Message: 'static>(
@@ -215,58 +218,76 @@ impl<'a> TermView<'a> {
         }
     }
 
-    fn handle_keyboard_event(&self, event: iced::keyboard::Event) -> Event {
-        match event {
-            iced::keyboard::Event::CharacterReceived(c) => {
-                Event::InputReceived(self.term.id, [c as u8].to_vec())
-            },
-            iced::keyboard::Event::KeyPressed {
-                key_code,
-                modifiers: _,
-            } => {
-                let mut is_app_cursor_mode = false;
-                if let Some(ref backend) = self.term.backend {
-                    is_app_cursor_mode = backend.is_mode(TermMode::APP_CURSOR);
-                }
+    fn handle_keyboard_event(
+        &self,
+        state: &mut TermViewState,
+        clipboard: &mut dyn iced_graphics::core::Clipboard,
+        event: iced::keyboard::Event,
+    ) -> Event {
+        if let Some(ref backend) = self.term.backend {
+            let mut binding_action = BindingAction::Ignore;
 
-                match key_code {
-                    KeyCode::Up => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOA"
-                        } else {
-                            b"\x1B[A"
-                        };
-                        Event::InputReceived(self.term.id, code.to_vec())
-                    },
-                    KeyCode::Down => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOB"
-                        } else {
-                            b"\x1B[B"
-                        };
-                        Event::InputReceived(self.term.id, code.to_vec())
-                    },
-                    KeyCode::Right => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOC"
-                        } else {
-                            b"\x1B[C"
-                        };
-                        Event::InputReceived(self.term.id, code.to_vec())
-                    },
-                    KeyCode::Left => {
-                        let code = if is_app_cursor_mode {
-                            b"\x1BOD"
-                        } else {
-                            b"\x1B[D"
-                        };
-                        Event::InputReceived(self.term.id, code.to_vec())
-                    },
-                    _ => Event::Ignored(self.term.id),
-                }
-            },
-            _ => Event::Ignored(self.term.id),
+            match event {
+                iced::keyboard::Event::ModifiersChanged(m) => {
+                    state.keyboard_modifiers = m;
+                },
+                iced::keyboard::Event::CharacterReceived(c) => {
+                    binding_action = self.bindings.get_action(
+                        InputKind::Char(c.to_ascii_lowercase()),
+                        state.keyboard_modifiers,
+                        backend.mode(),
+                    );
+
+                    if binding_action == BindingAction::Ignore
+                        && !c.is_control()
+                    {
+                        let mut buf = [0, 0, 0, 0];
+                        let str = c.encode_utf8(&mut buf);
+                        return Event::InputReceived(
+                            self.term.id,
+                            str.as_bytes().to_vec(),
+                        );
+                    }
+                },
+                iced::keyboard::Event::KeyPressed {
+                    key_code,
+                    modifiers,
+                } => {
+                    binding_action = self.bindings.get_action(
+                        InputKind::KeyCode(key_code),
+                        modifiers,
+                        backend.mode(),
+                    );
+                },
+                _ => {},
+            }
+
+            match binding_action {
+                BindingAction::Char(c) => {
+                    let mut buf = [0, 0, 0, 0];
+                    let str = c.encode_utf8(&mut buf);
+                    return Event::InputReceived(
+                        self.term.id,
+                        str.as_bytes().to_vec(),
+                    );
+                },
+                BindingAction::Esc(seq) => {
+                    return Event::InputReceived(
+                        self.term.id,
+                        seq.as_bytes().to_vec(),
+                    )
+                },
+                BindingAction::Paste => {
+                    if let Some(data) = clipboard.read() {
+                        let input: Vec<u8> = data.bytes().collect();
+                        return Event::InputReceived(self.term.id, input);
+                    }
+                },
+                _ => {},
+            };
         }
+
+        Event::Ignored(self.term.id)
     }
 }
 
@@ -410,7 +431,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         layout: iced_graphics::core::Layout<'_>,
         _cursor: Cursor,
         _renderer: &iced::Renderer<Theme>,
-        _clipboard: &mut dyn iced_graphics::core::Clipboard,
+        clipboard: &mut dyn iced_graphics::core::Clipboard,
         shell: &mut iced_graphics::core::Shell<'_, Event>,
         _viewport: &Rectangle,
     ) -> iced::event::Status {
@@ -430,7 +451,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                 self.handle_mouse_event(state, mouse_event)
             },
             iced::Event::Keyboard(keyboard_event) => {
-                self.handle_keyboard_event(keyboard_event)
+                self.handle_keyboard_event(state, clipboard, keyboard_event)
             },
             _ => Event::Ignored(self.term.id),
         };
@@ -455,6 +476,7 @@ impl<'a> From<TermView<'a>> for Element<'a, Event, iced::Renderer<Theme>> {
 pub struct TermViewState {
     is_focused: bool,
     scroll_pixels: f32,
+    keyboard_modifiers: Modifiers,
     size: Size<f32>,
 }
 
@@ -463,6 +485,7 @@ impl TermViewState {
         Self {
             is_focused: true,
             scroll_pixels: 0.0,
+            keyboard_modifiers: Modifiers::empty(),
             size: Size::from([0.0, 0.0]),
         }
     }
