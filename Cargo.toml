@@ -12,6 +12,7 @@ categories = ["gui"]
 license = "MIT"
 
 [dependencies]
+anyhow = "1.0.79"
 alacritty_terminal = "0.21.0"
 iced = { version = "0.10.0", features = [
     "smol",

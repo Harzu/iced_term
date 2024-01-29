@@ -64,6 +64,7 @@ impl Application for Example {
                 },
                 ..iced_term::FontSettings::default()
             },
+            theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: env!("SHELL").to_string(),
                 ..iced_term::BackendSettings::default()
