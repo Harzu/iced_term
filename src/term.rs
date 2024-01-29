@@ -1,5 +1,5 @@
 use crate::backend::{BackendSettings, Pty};
-use crate::bindings::{BindingAction, BindingsLayout, InputKind};
+use crate::bindings::{Binding, BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::theme::TermTheme;
 use crate::{ColorPalette, FontSettings};
@@ -33,6 +33,7 @@ pub enum Command {
     WriteToBackend(Vec<u8>),
     Scroll(i32),
     ChangeTheme(Box<ColorPalette>),
+    AddBindings(Vec<(Binding<InputKind>, BindingAction)>),
     Resize(Size<f32>),
     ProcessBackendEvent(alacritty_terminal::event::Event),
 }
@@ -62,7 +63,7 @@ impl Term {
             font: TermFont::new(settings.font),
             theme: TermTheme::new(Box::new(settings.theme)),
             padding: 0,
-            bindings: BindingsLayout::new(),
+            bindings: BindingsLayout::default(),
             cache: Cache::default(),
             backend_settings: settings.backend,
             backend: None,
@@ -147,6 +148,9 @@ impl Term {
             Command::ChangeTheme(palette) => {
                 self.theme = TermTheme::new(palette);
                 self.cache.clear();
+            },
+            Command::AddBindings(bindings) => {
+                self.bindings.add_bindings(bindings);
             },
         }
     }

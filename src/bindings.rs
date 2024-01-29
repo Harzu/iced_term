@@ -18,14 +18,15 @@ pub enum InputKind {
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
 pub struct Binding<T> {
-    target: T,
-    modifiers: Modifiers,
-    terminal_mode_include: TermMode,
-    terminal_mode_exclude: TermMode,
+    pub target: T,
+    pub modifiers: Modifiers,
+    pub terminal_mode_include: TermMode,
+    pub terminal_mode_exclude: TermMode,
 }
 
-type KeyboardBinding = Binding<InputKind>;
+pub type KeyboardBinding = Binding<InputKind>;
 
+#[macro_export]
 macro_rules! generate_bindings {
     (
         $binding_type:ident;
@@ -38,6 +39,15 @@ macro_rules! generate_bindings {
         );*
         $(;)*
     ) => {{
+        macro_rules! input_kind_match {
+            (KeyboardBinding, $char:literal) => {{
+                InputKind::Char($char)
+            }};
+            (KeyboardBinding, $key:ident) => {{
+                InputKind::KeyCode(KeyCode::$key)
+            }};
+        }
+
         let mut v = Vec::new();
 
         $(
@@ -49,7 +59,7 @@ macro_rules! generate_bindings {
             $(_terminal_mode_exclude.insert($terminal_mode_exclude);)*
 
             let binding = $binding_type {
-                target: input!($binding_type, $input_kind),
+                target: input_kind_match!($binding_type, $input_kind),
                 modifiers: _input_modifiers,
                 terminal_mode_include: _terminal_mode_include,
                 terminal_mode_exclude: _terminal_mode_exclude,
@@ -62,18 +72,15 @@ macro_rules! generate_bindings {
     }};
 }
 
-macro_rules! input {
-    (KeyboardBinding, $char:literal) => {{
-        InputKind::Char($char)
-    }};
-    (KeyboardBinding, $key:ident) => {{
-        InputKind::KeyCode(KeyCode::$key)
-    }};
-}
-
 #[derive(Clone, Debug)]
 pub struct BindingsLayout {
     layout: Vec<(Binding<InputKind>, BindingAction)>,
+}
+
+impl Default for BindingsLayout {
+    fn default() -> Self {
+        BindingsLayout::new()
+    }
 }
 
 impl BindingsLayout {
@@ -122,7 +129,7 @@ impl BindingsLayout {
     }
 }
 
-pub fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
+fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         KeyboardBinding;
         // ANY
@@ -334,7 +341,7 @@ mod tests {
 
     #[test]
     fn add_new_custom_keyboard_binding() {
-        let mut current_layout = BindingsLayout::new();
+        let mut current_layout = BindingsLayout::default();
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
             C, Modifiers::SHIFT | Modifiers::ALT; BindingAction::Copy;
@@ -355,7 +362,7 @@ mod tests {
 
     #[test]
     fn add_many_new_custom_keyboard_bindings() {
-        let mut current_layout: BindingsLayout = BindingsLayout::new();
+        let mut current_layout: BindingsLayout = BindingsLayout::default();
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
             'c', Modifiers::SHIFT, +TermMode::ALT_SCREEN;             BindingAction::Paste;
@@ -381,7 +388,7 @@ mod tests {
 
     #[test]
     fn add_custom_keyboard_bindings_that_replace_current() {
-        let mut current_layout = BindingsLayout::new();
+        let mut current_layout = BindingsLayout::default();
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
             'c',   Modifiers::SHIFT, +TermMode::ALT_SCREEN; BindingAction::Paste;
@@ -416,7 +423,7 @@ mod tests {
 
     #[test]
     fn get_action() {
-        let current_layout = BindingsLayout::new();
+        let current_layout = BindingsLayout::default();
         for (bind, action) in &current_layout.layout {
             let found_action = current_layout.get_action(
                 bind.target.clone(),
@@ -429,7 +436,7 @@ mod tests {
 
     #[test]
     fn get_action_with_custom_bindings() {
-        let mut current_layout = BindingsLayout::new();
+        let mut current_layout = BindingsLayout::default();
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
             'c',   Modifiers::SHIFT, +TermMode::ALT_SCREEN; BindingAction::Paste;
