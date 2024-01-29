@@ -1208,7 +1208,6 @@ dependencies = [
  "iced_core",
  "iced_graphics",
  "iced_tiny_skia",
- "iced_winit",
  "tokio",
 ]
 
