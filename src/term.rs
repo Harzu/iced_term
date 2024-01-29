@@ -238,10 +238,6 @@ impl<'a> TermView<'a> {
                         backend.mode(),
                     );
 
-                    // If binding's action not found in this event kind
-                    // input char will be passed to backend.
-                    // A lot of default control characters and mappings will be processed here
-                    // and you can overwrite any of them if it is need
                     if binding_action == BindingAction::Ignore
                         && !c.is_control()
                     {
@@ -252,15 +248,6 @@ impl<'a> TermView<'a> {
                             str.as_bytes().to_vec(),
                         );
                     }
-
-                    // if !c.is_control() {
-                    //     let mut buf = [0, 0, 0, 0];
-                    //     let str = c.encode_utf8(&mut buf);
-                    //     return Event::InputReceived(
-                    //         self.term.id,
-                    //         str.as_bytes().to_vec(),
-                    //     );
-                    // }
                 },
                 iced::keyboard::Event::KeyPressed {
                     key_code,
@@ -284,7 +271,7 @@ impl<'a> TermView<'a> {
                         str.as_bytes().to_vec(),
                     );
                 },
-                BindingAction::ESC(seq) => {
+                BindingAction::Esc(seq) => {
                     return Event::InputReceived(
                         self.term.id,
                         seq.as_bytes().to_vec(),

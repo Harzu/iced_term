@@ -67,11 +67,11 @@ impl Pty {
     }
 
     pub fn is_mode(&self, mode: TermMode) -> bool {
-        self.term.lock().mode().contains(mode)
+        self.term.lock_unfair().mode().contains(mode)
     }
 
     pub fn mode(&self) -> TermMode {
-        self.term.lock().mode().clone()
+        *self.term.lock_unfair().mode()
     }
 
     pub fn resize(
