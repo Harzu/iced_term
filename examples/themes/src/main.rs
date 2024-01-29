@@ -1,6 +1,6 @@
 use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
-use iced::widget::container;
+use iced::widget::{button, column, container, row};
 use iced::{
     executor, window, Application, Command, Font, Length, Settings,
     Subscription, Theme,
@@ -25,6 +25,7 @@ fn main() -> iced::Result {
 pub enum Message {
     IcedTermEvent(iced_term::Event),
     FontLoaded(Result<(), iced::font::Error>),
+    ThemeChanged(iced_term::ColorPalette),
 }
 
 struct App {
@@ -76,6 +77,11 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
             Message::FontLoaded(_) => Command::none(),
+            Message::ThemeChanged(palette) => {
+                self.term
+                    .update(iced_term::Command::ChangeTheme(Box::new(palette)));
+                Command::none()
+            },
             Message::IcedTermEvent(event) => {
                 match event {
                     iced_term::Event::InputReceived(_, input) => {
@@ -111,7 +117,62 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<Message, iced::Renderer> {
-        container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
+        let content = column![
+            row![
+                button("default").width(Length::Fill).padding(8).on_press(
+                    Message::ThemeChanged(iced_term::ColorPalette::default())
+                ),
+                button("ubuntu").width(Length::Fill).padding(8).on_press(
+                    Message::ThemeChanged(iced_term::ColorPalette {
+                        background: String::from("#300A24"),
+                        foreground: String::from("#FFFFFF"),
+                        black: String::from("#2E3436"),
+                        red: String::from("#CC0000"),
+                        green: String::from("#4E9A06"),
+                        yellow: String::from("#C4A000"),
+                        blue: String::from("#3465A4"),
+                        magenta: String::from("#75507B"),
+                        cyan: String::from("#06989A"),
+                        white: String::from("#D3D7CF"),
+                        bright_black: String::from("#555753"),
+                        bright_red: String::from("#EF2929"),
+                        bright_green: String::from("#8AE234"),
+                        bright_yellow: String::from("#FCE94F"),
+                        bright_blue: String::from("#729FCF"),
+                        bright_magenta: String::from("#AD7FA8"),
+                        bright_cyan: String::from("#34E2E2"),
+                        bright_white: String::from("#EEEEEC"),
+                        ..Default::default()
+                    })
+                ),
+                button("3024 Day").width(Length::Fill).padding(8).on_press(
+                    Message::ThemeChanged(iced_term::ColorPalette {
+                        background: String::from("#F7F7F7"),
+                        foreground: String::from("#4A4543"),
+                        black: String::from("#090300"),
+                        red: String::from("#DB2D20"),
+                        green: String::from("#01A252"),
+                        yellow: String::from("#FDED02"),
+                        blue: String::from("#01A0E4"),
+                        magenta: String::from("#A16A94"),
+                        cyan: String::from("#B5E4F4"),
+                        white: String::from("#A5A2A2"),
+                        bright_black: String::from("#5C5855"),
+                        bright_red: String::from("#E8BBD0"),
+                        bright_green: String::from("#3A3432"),
+                        bright_yellow: String::from("#4A4543"),
+                        bright_blue: String::from("#807D7C"),
+                        bright_magenta: String::from("#D6D5D4"),
+                        bright_cyan: String::from("#CDAB53"),
+                        bright_white: String::from("#F7F7F7"),
+                        ..Default::default()
+                    })
+                ),
+            ],
+            row![iced_term::term_view(&self.term).map(Message::IcedTermEvent)]
+        ];
+
+        container(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

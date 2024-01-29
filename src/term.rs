@@ -2,16 +2,14 @@ use crate::backend::{BackendSettings, Pty};
 use crate::bindings::{BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::theme::TermTheme;
-use crate::FontSettings;
+use crate::{ColorPalette, FontSettings};
 use alacritty_terminal::term::{cell, TermMode};
 use iced::alignment::{Horizontal, Vertical};
 use iced::futures::SinkExt;
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
-use iced::{
-    Color, Element, Length, Point, Rectangle, Size, Subscription, Theme,
-};
+use iced::{Element, Length, Point, Rectangle, Size, Subscription, Theme};
 use iced_core::keyboard::Modifiers;
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
@@ -34,6 +32,7 @@ pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
     WriteToBackend(Vec<u8>),
     Scroll(i32),
+    ChangeTheme(Box<ColorPalette>),
     Resize(Size<f32>),
     ProcessBackendEvent(alacritty_terminal::event::Event),
 }
@@ -41,6 +40,7 @@ pub enum Command {
 #[derive(Default, Clone)]
 pub struct TermSettings {
     pub font: FontSettings,
+    pub theme: ColorPalette,
     pub backend: BackendSettings,
 }
 
@@ -60,7 +60,7 @@ impl Term {
         Self {
             id,
             font: TermFont::new(settings.font),
-            theme: TermTheme::new(),
+            theme: TermTheme::new(Box::new(settings.theme)),
             padding: 0,
             bindings: BindingsLayout::new(),
             cache: Cache::default(),
@@ -141,7 +141,12 @@ impl Term {
                         self.font.measure().width,
                         self.font.measure().height,
                     );
+                    self.cache.clear();
                 }
+            },
+            Command::ChangeTheme(palette) => {
+                self.theme = TermTheme::new(palette);
+                self.cache.clear();
             },
         }
     }
@@ -157,22 +162,8 @@ pub fn term_view(term: &Term) -> Element<'_, Event> {
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(term.padding)
-        .style(iced::theme::Container::Custom(Box::new(Style)))
+        .style(iced::theme::Container::Custom(Box::new(term.theme.clone())))
         .into()
-}
-
-#[derive(Default)]
-struct Style;
-
-impl container::StyleSheet for Style {
-    type Style = Theme;
-
-    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            background: Some(Color::from_rgb8(40, 39, 39).into()),
-            ..container::Appearance::default()
-        }
-    }
 }
 
 impl<'a> TermView<'a> {
@@ -183,6 +174,7 @@ impl<'a> TermView<'a> {
     pub fn focus<Message: 'static>(
         id: iced::widget::text_input::Id,
     ) -> iced::Command<Message> {
+        println!("{:?}", id);
         iced::widget::text_input::focus(id)
     }
 

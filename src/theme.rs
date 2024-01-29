@@ -1,15 +1,93 @@
 use alacritty_terminal::vte::ansi::{self, NamedColor};
-use iced::Color;
+use iced::{widget::container, Color, Theme};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
+pub struct ColorPalette {
+    pub foreground: String,
+    pub background: String,
+    pub black: String,
+    pub red: String,
+    pub green: String,
+    pub yellow: String,
+    pub blue: String,
+    pub magenta: String,
+    pub cyan: String,
+    pub white: String,
+    pub bright_black: String,
+    pub bright_red: String,
+    pub bright_green: String,
+    pub bright_yellow: String,
+    pub bright_blue: String,
+    pub bright_magenta: String,
+    pub bright_cyan: String,
+    pub bright_white: String,
+    pub bright_foreground: Option<String>,
+    pub dim_foreground: String,
+    pub dim_black: String,
+    pub dim_red: String,
+    pub dim_green: String,
+    pub dim_yellow: String,
+    pub dim_blue: String,
+    pub dim_magenta: String,
+    pub dim_cyan: String,
+    pub dim_white: String,
+}
+
+impl Default for ColorPalette {
+    fn default() -> Self {
+        Self {
+            foreground: String::from("#d8d8d8"),
+            background: String::from("#181818"),
+            black: String::from("#181818"),
+            red: String::from("#ac4242"),
+            green: String::from("#90a959"),
+            yellow: String::from("#f4bf75"),
+            blue: String::from("#6a9fb5"),
+            magenta: String::from("#aa759f"),
+            cyan: String::from("#75b5aa"),
+            white: String::from("#d8d8d8"),
+            bright_black: String::from("#6b6b6b"),
+            bright_red: String::from("#c55555"),
+            bright_green: String::from("#aac474"),
+            bright_yellow: String::from("#feca88"),
+            bright_blue: String::from("#82b8c8"),
+            bright_magenta: String::from("#c28cb8"),
+            bright_cyan: String::from("#93d3c3"),
+            bright_white: String::from("#f8f8f8"),
+            bright_foreground: None,
+            dim_foreground: String::from("#828482"),
+            dim_black: String::from("#0f0f0f"),
+            dim_red: String::from("#712b2b"),
+            dim_green: String::from("#5f6f3a"),
+            dim_yellow: String::from("#a17e4d"),
+            dim_blue: String::from("#456877"),
+            dim_magenta: String::from("#704d68"),
+            dim_cyan: String::from("#4d7770"),
+            dim_white: String::from("#8e8e8e"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct TermTheme {
+    palette: Box<ColorPalette>,
     ansi256_colors: HashMap<u8, Color>,
 }
 
-impl TermTheme {
-    pub fn new() -> Self {
+impl Default for TermTheme {
+    fn default() -> Self {
         Self {
+            palette: Box::<ColorPalette>::default(),
+            ansi256_colors: TermTheme::get_ansi256_colors(),
+        }
+    }
+}
+
+impl TermTheme {
+    pub fn new(palette: Box<ColorPalette>) -> Self {
+        Self {
+            palette,
             ansi256_colors: TermTheme::get_ansi256_colors(),
         }
     }
@@ -47,27 +125,30 @@ impl TermTheme {
             ansi::Color::Spec(rgb) => Color::from_rgb8(rgb.r, rgb.g, rgb.b),
             ansi::Color::Indexed(index) => {
                 if index <= 15 {
-                    return match index {
-                        // Default terminal reserved colors
-                        0 => Color::from_rgb8(40, 39, 39),
-                        1 => Color::from_rgb8(203, 35, 29),
-                        2 => Color::from_rgb8(152, 150, 26),
-                        3 => Color::from_rgb8(214, 152, 33),
-                        4 => Color::from_rgb8(69, 132, 135),
-                        5 => Color::from_rgb8(176, 97, 133),
-                        6 => Color::from_rgb8(104, 156, 105),
-                        7 => Color::from_rgb8(168, 152, 131),
-                        // Bright terminal reserved colors
-                        8 => Color::from_rgb8(146, 130, 115),
-                        9 => Color::from_rgb8(250, 72, 52),
-                        10 => Color::from_rgb8(184, 186, 38),
-                        11 => Color::from_rgb8(249, 188, 47),
-                        12 => Color::from_rgb8(131, 164, 151),
-                        13 => Color::from_rgb8(210, 133, 154),
-                        14 => Color::from_rgb8(142, 191, 123),
-                        15 => Color::from_rgb8(235, 218, 177),
-                        _ => Color::from_rgb8(0, 0, 0),
+                    let color = match index {
+                        // Normal terminal colors
+                        0 => &self.palette.black,
+                        1 => &self.palette.red,
+                        2 => &self.palette.green,
+                        3 => &self.palette.yellow,
+                        4 => &self.palette.blue,
+                        5 => &self.palette.magenta,
+                        6 => &self.palette.cyan,
+                        7 => &self.palette.white,
+                        // Bright terminal colors
+                        8 => &self.palette.bright_black,
+                        9 => &self.palette.bright_red,
+                        10 => &self.palette.bright_green,
+                        11 => &self.palette.bright_yellow,
+                        12 => &self.palette.bright_blue,
+                        13 => &self.palette.bright_magenta,
+                        14 => &self.palette.bright_cyan,
+                        15 => &self.palette.bright_white,
+                        _ => &self.palette.background,
                     };
+
+                    return hex_to_color(color)
+                        .unwrap_or_else(|_| panic!("invalid color {}", color));
                 }
 
                 // Other colors
@@ -76,30 +157,139 @@ impl TermTheme {
                     None => Color::from_rgb8(0, 0, 0),
                 }
             },
-            ansi::Color::Named(c) => match c {
-                NamedColor::Foreground => Color::from_rgb8(235, 218, 177),
-                NamedColor::Background => Color::from_rgb8(40, 39, 39),
-                // Default terminal reserved colors
-                NamedColor::Black => Color::from_rgb8(40, 39, 39),
-                NamedColor::Red => Color::from_rgb8(203, 35, 29),
-                NamedColor::Green => Color::from_rgb8(152, 150, 26),
-                NamedColor::Yellow => Color::from_rgb8(214, 152, 33),
-                NamedColor::Blue => Color::from_rgb8(69, 132, 135),
-                NamedColor::Magenta => Color::from_rgb8(176, 97, 133),
-                NamedColor::Cyan => Color::from_rgb8(104, 156, 105),
-                NamedColor::White => Color::from_rgb8(168, 152, 131),
-                // Bright terminal reserved colors
-                NamedColor::BrightBlack => Color::from_rgb8(146, 130, 115),
-                NamedColor::BrightRed => Color::from_rgb8(250, 72, 52),
-                NamedColor::BrightGreen => Color::from_rgb8(184, 186, 38),
-                NamedColor::BrightYellow => Color::from_rgb8(249, 188, 47),
-                NamedColor::BrightBlue => Color::from_rgb8(131, 164, 151),
-                NamedColor::BrightMagenta => Color::from_rgb8(210, 133, 154),
-                NamedColor::BrightCyan => Color::from_rgb8(142, 191, 123),
-                NamedColor::BrightWhite => Color::from_rgb8(235, 218, 177),
-                NamedColor::BrightForeground => Color::from_rgb8(235, 218, 177),
-                _ => Color::from_rgb8(0, 0, 0),
+            ansi::Color::Named(c) => {
+                let color = match c {
+                    NamedColor::Foreground => &self.palette.foreground,
+                    NamedColor::Background => &self.palette.background,
+                    // Normal terminal colors
+                    NamedColor::Black => &self.palette.black,
+                    NamedColor::Red => &self.palette.red,
+                    NamedColor::Green => &self.palette.green,
+                    NamedColor::Yellow => &self.palette.yellow,
+                    NamedColor::Blue => &self.palette.blue,
+                    NamedColor::Magenta => &self.palette.magenta,
+                    NamedColor::Cyan => &self.palette.cyan,
+                    NamedColor::White => &self.palette.white,
+                    // Bright terminal colors
+                    NamedColor::BrightBlack => &self.palette.bright_black,
+                    NamedColor::BrightRed => &self.palette.bright_red,
+                    NamedColor::BrightGreen => &self.palette.bright_green,
+                    NamedColor::BrightYellow => &self.palette.bright_yellow,
+                    NamedColor::BrightBlue => &self.palette.bright_blue,
+                    NamedColor::BrightMagenta => &self.palette.bright_magenta,
+                    NamedColor::BrightCyan => &self.palette.bright_cyan,
+                    NamedColor::BrightWhite => &self.palette.bright_white,
+                    NamedColor::BrightForeground => {
+                        match &self.palette.bright_foreground {
+                            Some(color) => color,
+                            None => &self.palette.foreground,
+                        }
+                    },
+                    // Dim terminal colors
+                    NamedColor::DimForeground => &self.palette.dim_foreground,
+                    NamedColor::DimBlack => &self.palette.dim_black,
+                    NamedColor::DimRed => &self.palette.dim_red,
+                    NamedColor::DimGreen => &self.palette.dim_green,
+                    NamedColor::DimYellow => &self.palette.dim_yellow,
+                    NamedColor::DimBlue => &self.palette.dim_blue,
+                    NamedColor::DimMagenta => &self.palette.dim_magenta,
+                    NamedColor::DimCyan => &self.palette.dim_cyan,
+                    NamedColor::DimWhite => &self.palette.dim_white,
+                    _ => &self.palette.background,
+                };
+
+                hex_to_color(color)
+                    .unwrap_or_else(|_| panic!("invalid color {}", color))
             },
+        }
+    }
+}
+
+impl container::StyleSheet for TermTheme {
+    type Style = Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
+        container::Appearance {
+            background: Some(
+                hex_to_color(&self.palette.background)
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "invalid background color {}",
+                            self.palette.background
+                        )
+                    })
+                    .into(),
+            ),
+            ..container::Appearance::default()
+        }
+    }
+}
+
+fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
+    if hex.len() != 7 {
+        return Err(anyhow::format_err!("input string is in non valid format"));
+    }
+
+    let r = u8::from_str_radix(&hex[1..3], 16)?;
+    let g = u8::from_str_radix(&hex[3..5], 16)?;
+    let b = u8::from_str_radix(&hex[5..7], 16)?;
+
+    Ok(Color::from_rgb8(r, g, b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hex_to_color;
+    use crate::TermTheme;
+    use alacritty_terminal::vte::ansi;
+    use std::collections::HashMap;
+
+    #[test]
+    fn hex_to_color_valid_convertion() {
+        assert!(hex_to_color("#000000").is_ok())
+    }
+
+    #[test]
+    fn hex_to_color_short_string() {
+        assert!(hex_to_color("GG").is_err());
+    }
+
+    #[test]
+    fn hex_to_color_long_string() {
+        assert!(hex_to_color("GG000000").is_err());
+    }
+
+    #[test]
+    fn hex_to_color_non_valid_hex_string() {
+        assert!(hex_to_color("#KKLLOO").is_err());
+    }
+
+    #[test]
+    fn get_basic_indexed_colors() {
+        let default_theme = TermTheme::default();
+        let basic_indexed_colors_map: HashMap<u8, String> = HashMap::from([
+            (0, default_theme.palette.black.clone()),
+            (1, default_theme.palette.red.clone()),
+            (2, default_theme.palette.green.clone()),
+            (3, default_theme.palette.yellow.clone()),
+            (4, default_theme.palette.blue.clone()),
+            (5, default_theme.palette.magenta.clone()),
+            (6, default_theme.palette.cyan.clone()),
+            (7, default_theme.palette.white.clone()),
+            (8, default_theme.palette.bright_black.clone()),
+            (9, default_theme.palette.bright_red.clone()),
+            (10, default_theme.palette.bright_green.clone()),
+            (11, default_theme.palette.bright_yellow.clone()),
+            (12, default_theme.palette.bright_blue.clone()),
+            (13, default_theme.palette.bright_magenta.clone()),
+            (14, default_theme.palette.bright_cyan.clone()),
+            (15, default_theme.palette.bright_white.clone()),
+        ]);
+
+        for index in 0..16 {
+            let color = default_theme.get_color(ansi::Color::Indexed(index));
+            let expected_color = basic_indexed_colors_map.get(&index).unwrap();
+            assert_eq!(color, hex_to_color(expected_color).unwrap())
         }
     }
 }

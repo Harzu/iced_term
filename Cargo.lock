@@ -135,6 +135,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.79"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1204,6 +1210,7 @@ name = "iced_term"
 version = "0.2.1"
 dependencies = [
  "alacritty_terminal",
+ "anyhow",
  "iced",
  "iced_core",
  "iced_graphics",
@@ -2608,6 +2615,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be55cf8942feac5c765c2c993422806843c9a9a45d4d5c407ad6dd2ea95eb9b6"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "themes"
+version = "0.10.1"
+dependencies = [
+ "iced",
+ "iced_term",
 ]
 
 [[package]]
