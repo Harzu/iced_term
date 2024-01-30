@@ -98,6 +98,21 @@ impl Application for App {
                             ),
                         );
                     },
+                    iced_term::Event::SelectStarted(_, selection_type, location) => {
+                        self.term.update(
+                            iced_term::Command::SelectStart(
+                                selection_type,
+                                location,
+                            ),
+                        );
+                    },
+                    iced_term::Event::SelectUpdated(_, location) => {
+                        self.term.update(
+                            iced_term::Command::SelectUpdate(
+                                location,
+                            ),
+                        );
+                    },
                     iced_term::Event::Ignored(_) => {},
                 };
 

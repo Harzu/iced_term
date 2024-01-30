@@ -172,6 +172,25 @@ impl Application for Example {
                             );
                         }
                     },
+                    iced_term::Event::SelectStarted(id, selection_type, location) => {
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(
+                                iced_term::Command::SelectStart(
+                                    selection_type,
+                                    location,
+                                ),
+                            );
+                        }
+                    },
+                    iced_term::Event::SelectUpdated(id, location) => {
+                        if let Some(tab) = self.tabs.get_mut(&id) {
+                            tab.update(
+                                iced_term::Command::SelectUpdate(
+                                    location,
+                                ),
+                            );
+                        }
+                    },
                     _ => {},
                 };
             },

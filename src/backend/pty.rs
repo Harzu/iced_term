@@ -3,8 +3,11 @@ use alacritty_terminal::event::Notify;
 use alacritty_terminal::event::{EventListener, OnResize, WindowSize};
 use alacritty_terminal::event_loop::Notifier;
 use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::index::{Column, Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionRange, SelectionType};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::Cell;
+use alacritty_terminal::term::viewport_to_point;
 use alacritty_terminal::term::{test::TermSize, TermMode};
 use alacritty_terminal::Grid;
 use std::borrow::Cow;
@@ -74,6 +77,66 @@ impl Pty {
         *self.term.lock_unfair().mode()
     }
 
+    pub fn start_selection(
+        &mut self,
+        selection_type: SelectionType,
+        x: f32,
+        y: f32,
+        cell_width: f32,
+        cell_height: f32,
+    ) {
+        let mut term = self.term.lock_unfair();
+        let col = x / cell_width;
+        let row = y / cell_height;
+        let location = viewport_to_point(term.grid().display_offset(), Point::new(
+            row as usize,
+            Column(col as usize),
+        ));
+        let side = if col.fract() < 0.5 {
+            Side::Left
+        } else {
+            Side::Right
+        };
+
+        println!("start");
+        term.selection = Some(Selection::new(selection_type, location, side))
+    }
+
+    pub fn update_selection(
+        &mut self,
+        x: f32,
+        y: f32,
+        cell_width: f32,
+        cell_height: f32,
+    ) {
+        let mut term = self.term.lock_unfair();
+        let display_offset = term.grid().display_offset();
+        if let Some(ref mut selection) = term.selection {
+            println!("update");
+            let col = x / cell_width;
+            let row = y / cell_height;
+            let location = viewport_to_point(display_offset, Point::new(
+                row as usize,
+                Column(col as usize),
+            ));
+            let side = if col.fract() < 0.5 {
+                Side::Left
+            } else {
+                Side::Right
+            };
+            selection.update(location, side);
+        }
+    }
+
+    pub fn get_selection_range(&self) -> Option<SelectionRange> {
+        let term = self.term.lock_unfair();
+        if let Some(selection) = &term.selection {
+            return selection.to_range(&term)
+        }
+
+        None
+    }
+
     pub fn resize(
         &mut self,
         rows: u16,
@@ -90,7 +153,7 @@ impl Pty {
             };
 
             self.notifier.on_resize(size);
-            self.term.lock().resize(TermSize::new(
+            self.term.lock_unfair().resize(TermSize::new(
                 size.num_cols as usize,
                 size.num_lines as usize,
             ));
@@ -99,13 +162,13 @@ impl Pty {
 
     pub fn write_to_pty<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
         self.notifier.notify(input);
-        self.term.lock().scroll_display(Scroll::Bottom);
+        self.term.lock_unfair().scroll_display(Scroll::Bottom);
     }
 
     pub fn scroll(&mut self, delta_value: i32) {
         if delta_value != 0 {
             let scroll = Scroll::Delta(delta_value);
-            self.term.lock().scroll_display(scroll);
+            self.term.lock_unfair().grid_mut().scroll_display(scroll);
         }
     }
 
