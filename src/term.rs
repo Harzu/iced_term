@@ -13,6 +13,7 @@ use iced::widget::canvas::{Cache, Path, Text};
 use iced::widget::container;
 use iced::{Element, Length, Point, Rectangle, Size, Subscription, Theme};
 use iced_core::keyboard::Modifiers;
+use iced_core::mouse::{self, Click};
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
@@ -55,7 +56,6 @@ pub struct Term {
     id: u64,
     font: TermFont,
     theme: TermTheme,
-    padding: u16,
     cache: Cache,
     bindings: BindingsLayout,
     backend_settings: BackendSettings,
@@ -68,7 +68,6 @@ impl Term {
             id,
             font: TermFont::new(settings.font),
             theme: TermTheme::new(Box::new(settings.theme)),
-            padding: 0,
             bindings: BindingsLayout::default(),
             cache: Cache::default(),
             backend_settings: settings.backend,
@@ -108,7 +107,12 @@ impl Term {
         match cmd {
             Command::InitBackend(sender) => {
                 self.backend = Some(
-                    Pty::new(self.id, sender, self.backend_settings.clone())
+                    Pty::new(
+                        self.id,
+                        sender,
+                        self.backend_settings.clone(),
+                        self.font.measure(),
+                    )
                         .unwrap_or_else(|_| {
                             panic!("init pty with ID: {} is failed", self.id);
                         }),
@@ -132,21 +136,16 @@ impl Term {
             },
             Command::Resize(size) => {
                 if let Some(ref mut backend) = self.backend {
-                    let container_padding =
-                        f32::from(self.padding.saturating_mul(2));
-                    let container_width =
-                        (size.width - container_padding).max(1.0);
-                    let container_height =
-                        (size.height - container_padding).max(1.0);
-                    let rows = (container_height / self.font.measure().height)
+                    let rows = (size.height / backend.size().cell_height as f32)
                         .floor() as u16;
-                    let cols = (container_width / self.font.measure().width)
+                    let cols = (size.width / backend.size().cell_width as f32)
                         .floor() as u16;
+                    let font_size = self.font.measure();
                     backend.resize(
                         rows,
                         cols,
-                        self.font.measure().width,
-                        self.font.measure().height,
+                        font_size.width,
+                        font_size.height,
                     );
                     self.cache.clear();
                 }
@@ -164,8 +163,6 @@ impl Term {
                         selection_type,
                         x,
                         y,
-                        self.font.measure().width,
-                        self.font.measure().height
                     );
                     self.cache.clear();
                 }
@@ -175,8 +172,6 @@ impl Term {
                     backend.update_selection(
                         x,
                         y,
-                        self.font.measure().width,
-                        self.font.measure().height
                     );
                     self.cache.clear();
                 }  
@@ -194,7 +189,6 @@ pub fn term_view(term: &Term) -> Element<'_, Event> {
     container(TermView::new(term, &term.bindings))
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding(term.padding)
         .style(iced::theme::Container::Custom(Box::new(term.theme.clone())))
         .into()
 }
@@ -210,7 +204,7 @@ impl<'a> TermView<'a> {
         iced::widget::text_input::focus(id)
     }
 
-    fn is_active_cursor(
+    fn is_cursor_in_layout(
         &self,
         cursor: Cursor,
         layout: iced_graphics::core::Layout<'_>,
@@ -232,66 +226,75 @@ impl<'a> TermView<'a> {
     fn handle_mouse_event(
         &self,
         state: &mut TermViewState,
-        cursor: Cursor,
-        layout: iced_graphics::core::Layout<'_>,
+        layout_position: Point,
+        cursor_position: Point,
         event: iced::mouse::Event,
     ) -> Event {
-        match event {
-            iced_core::mouse::Event::ButtonPressed(button) => {
-                if let Some(cursor_position) = cursor.position() {
+        let mut term_event = Event::Ignored(self.term.id);
+        if let Some(ref backend) = self.term.backend {
+            match event {
+                iced_core::mouse::Event::ButtonPressed(iced_core::mouse::Button::Left) => {
+                    state.last_click = Some(Click::new(cursor_position, state.last_click));
+                    let selction_type = match state.last_click {
+                        Some(click) => match click.kind() {
+                            mouse::click::Kind::Single => SelectionType::Simple,
+                            mouse::click::Kind::Double => SelectionType::Semantic,
+                            mouse::click::Kind::Triple => SelectionType::Lines,
+                        }
+                        None => SelectionType::Simple,
+                    };
+    
                     state.is_dragged = true;
-                    let layout_position = layout.position();
-                    return Event::SelectStarted(
+                    term_event = Event::SelectStarted(
                         self.term.id,
-                        SelectionType::Simple,
-                        (cursor_position.x - layout_position.x, cursor_position.y - layout_position.y)
-                    );
-                }
-                
-                Event::Ignored(self.term.id)
-            },
-            iced_core::mouse::Event::CursorMoved { position } => {
-                if let Some(cursor_position) = cursor.position() {
+                        selction_type,
+                        (
+                            cursor_position.x - layout_position.x,
+                            cursor_position.y - layout_position.y
+                        )
+                    )
+                },
+                iced_core::mouse::Event::CursorMoved { position: _ } => {
                     if state.is_dragged {
-                        let layout_position = layout.position();
-
-                        return Event::SelectUpdated(
+                        term_event = Event::SelectUpdated(
                             self.term.id,
-                            (cursor_position.x - layout_position.x, cursor_position.y - layout_position.y)
+                            (
+                                cursor_position.x - layout_position.x,
+                                cursor_position.y - layout_position.y
+                            )
                         );
                     }
-                }
-                Event::Ignored(self.term.id)
-            },
-            iced_core::mouse::Event::ButtonReleased(button) => {
-                // println!("{:?}", cursor);
-                state.is_dragged = false;
-                Event::Ignored(self.term.id)
-            },
-            iced::mouse::Event::WheelScrolled { delta } => match delta {
-                ScrollDelta::Lines { x: _, y } => {
-                    state.scroll_pixels = 0.0;
-                    let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-                    Event::Scrolled(self.term.id, lines)
                 },
-                ScrollDelta::Pixels { x: _, y } => {
-                    state.scroll_pixels -= y;
-                    let mut lines = 0;
-                    let line_height = self.term.font.measure().height;
-                    while state.scroll_pixels <= -line_height {
-                        lines -= 1;
-                        state.scroll_pixels += line_height;
-                    }
-                    while state.scroll_pixels >= line_height {
-                        lines += 1;
-                        state.scroll_pixels -= line_height;
-                    }
-
-                    Event::Scrolled(self.term.id, -lines as f32)
+                iced_core::mouse::Event::ButtonReleased(iced_core::mouse::Button::Left) => {
+                    state.is_dragged = false;
                 },
-            },
-            _ => Event::Ignored(self.term.id),
+                iced::mouse::Event::WheelScrolled { delta } => match delta {
+                    ScrollDelta::Lines { x: _, y } => {
+                        state.scroll_pixels = 0.0;
+                        let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
+                        term_event = Event::Scrolled(self.term.id, lines)
+                    },
+                    ScrollDelta::Pixels { x: _, y } => {
+                        state.scroll_pixels -= y;
+                        let mut lines = 0;
+                        let line_height = self.term.font.measure().height;
+                        while state.scroll_pixels <= -line_height {
+                            lines -= 1;
+                            state.scroll_pixels += line_height;
+                        }
+                        while state.scroll_pixels >= line_height {
+                            lines += 1;
+                            state.scroll_pixels -= line_height;
+                        }
+    
+                        term_event = Event::Scrolled(self.term.id, -lines as f32)
+                    },
+                },
+                _ => {},
+            }
         }
+
+        term_event
     }
 
     fn handle_keyboard_event(
@@ -421,13 +424,10 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
     ) {
         let geom = self.term.cache.draw(renderer, viewport.size(), |frame| {
             if let Some(ref backend) = self.term.backend {
-                let term_mode = backend.mode();
-                let content = backend.renderable_content();
-                let selectable_range = backend.get_selection_range();
+                let (content, selectable_range, term_mode, size) = backend.renderable_content();
                 for indexed in content.display_iter() {
-                    let cell_width = self.term.font.measure().width as f64;
-                    let cell_height = self.term.font.measure().height as f64;
-
+                    let cell_width = size.cell_width as f64;
+                    let cell_height = size.cell_height as f64;
                     let x = indexed.point.column.0 as f64 * cell_width;
                     let y = (indexed.point.line.0 as f64
                         + content.display_offset() as f64)
@@ -530,17 +530,25 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
             return iced::event::Status::Ignored;
         }
 
-        let term_event = match event {
+        let mut term_event = Event::Ignored(self.term.id);
+        match event {
             iced::Event::Mouse(mouse_event) => {
-                match self.is_active_cursor(cursor, layout) {
-                    true => self.handle_mouse_event(state, cursor, layout, mouse_event),
-                    false => Event::Ignored(self.term.id)
+                if self.is_cursor_in_layout(cursor, layout) {
+                    let cursor_position = cursor
+                        .position()
+                        .unwrap();
+                    term_event = self.handle_mouse_event(
+                        state, 
+                        layout.position(), 
+                        cursor_position,
+                        mouse_event
+                    )
                 }
             },
             iced::Event::Keyboard(keyboard_event) => {
-                self.handle_keyboard_event(state, clipboard, keyboard_event)
+                term_event = self.handle_keyboard_event(state, clipboard, keyboard_event)
             },
-            _ => Event::Ignored(self.term.id),
+            _ => {}
         };
 
         match term_event {
@@ -560,7 +568,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         _viewport: &Rectangle,
         _renderer: &iced::Renderer<Theme>,
     ) -> iced_core::mouse::Interaction {
-        if self.is_active_cursor(cursor, layout) {
+        if self.is_cursor_in_layout(cursor, layout) {
             return iced_core::mouse::Interaction::Text;
         }
 
@@ -578,6 +586,7 @@ impl<'a> From<TermView<'a>> for Element<'a, Event, iced::Renderer<Theme>> {
 pub struct TermViewState {
     is_focused: bool,
     is_dragged: bool,
+    last_click: Option<mouse::Click>,
     scroll_pixels: f32,
     keyboard_modifiers: Modifiers,
     size: Size<f32>,
@@ -588,6 +597,7 @@ impl TermViewState {
         Self {
             is_focused: true,
             is_dragged: false,
+            last_click: None,
             scroll_pixels: 0.0,
             keyboard_modifiers: Modifiers::empty(),
             size: Size::from([0.0, 0.0]),

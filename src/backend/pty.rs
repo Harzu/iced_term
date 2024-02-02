@@ -8,16 +8,18 @@ use alacritty_terminal::selection::{Selection, SelectionRange, SelectionType};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::Cell;
 use alacritty_terminal::term::viewport_to_point;
-use alacritty_terminal::term::{test::TermSize, TermMode};
+use alacritty_terminal::term::{test::TermSize, Term, TermMode};
 use alacritty_terminal::Grid;
+use iced_core::Size;
 use std::borrow::Cow;
+use std::cmp::min;
 use std::io::Result;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 pub struct Pty {
-    _id: u64,
-    term: Arc<FairMutex<alacritty_terminal::Term<EventProxy>>>,
+    term: Arc<FairMutex<Term<EventProxy>>>,
+    size: WindowSize,
     notifier: Notifier,
 }
 
@@ -26,6 +28,7 @@ impl Pty {
         id: u64,
         event_sender: mpsc::Sender<alacritty_terminal::event::Event>,
         settings: BackendSettings,
+        font_size: Size<f32>,
     ) -> Result<Self> {
         let pty_config = alacritty_terminal::tty::Options {
             shell: Some(alacritty_terminal::tty::Shell::new(
@@ -35,18 +38,18 @@ impl Pty {
             ..alacritty_terminal::tty::Options::default()
         };
         let config = alacritty_terminal::term::Config::default();
-        let window_size = alacritty_terminal::event::WindowSize {
-            cell_width: 1,
-            cell_height: 1,
+        let window_size = WindowSize {
+            cell_width: font_size.width as u16,
+            cell_height: font_size.height as u16,
             num_cols: settings.cols,
             num_lines: settings.rows,
         };
 
-        let pty = alacritty_terminal::tty::new(&pty_config, window_size, id)?;
+        let pty = alacritty_terminal::tty::new(&pty_config, window_size.clone(), id)?;
         let term_size =
             TermSize::new(settings.cols as usize, settings.rows as usize);
         let event_proxy = EventProxy(event_sender);
-        let term = Arc::new(FairMutex::new(alacritty_terminal::Term::new(
+        let term = Arc::new(FairMutex::new(Term::new(
             config,
             &term_size,
             event_proxy.clone(),
@@ -63,18 +66,14 @@ impl Pty {
         let _pty_join_handle = pty_event_loop.spawn();
 
         Ok(Self {
-            _id: id,
             term: term.clone(),
+            size: window_size,
             notifier,
         })
     }
 
-    pub fn is_mode(&self, mode: TermMode) -> bool {
-        self.term.lock_unfair().mode().contains(mode)
-    }
-
     pub fn mode(&self) -> TermMode {
-        *self.term.lock_unfair().mode()
+        *self.term.lock().mode()
     }
 
     pub fn start_selection(
@@ -82,59 +81,54 @@ impl Pty {
         selection_type: SelectionType,
         x: f32,
         y: f32,
-        cell_width: f32,
-        cell_height: f32,
     ) {
-        let mut term = self.term.lock_unfair();
-        let col = x / cell_width;
-        let row = y / cell_height;
-        let location = viewport_to_point(term.grid().display_offset(), Point::new(
-            row as usize,
-            Column(col as usize),
-        ));
-        let side = if col.fract() < 0.5 {
-            Side::Left
-        } else {
-            Side::Right
-        };
-
-        println!("start");
-        term.selection = Some(Selection::new(selection_type, location, side))
+        let mut term = self.term.lock();
+        let location = self.selection_point(x, y, term.grid().display_offset());
+        term.selection = Some(Selection::new(selection_type, location, self.selection_side(x)))
     }
 
-    pub fn update_selection(
-        &mut self,
-        x: f32,
-        y: f32,
-        cell_width: f32,
-        cell_height: f32,
-    ) {
-        let mut term = self.term.lock_unfair();
+    pub fn update_selection(&mut self, x: f32, y: f32) {
+        let mut term = self.term.lock();
         let display_offset = term.grid().display_offset();
         if let Some(ref mut selection) = term.selection {
-            println!("update");
-            let col = x / cell_width;
-            let row = y / cell_height;
-            let location = viewport_to_point(display_offset, Point::new(
-                row as usize,
-                Column(col as usize),
-            ));
-            let side = if col.fract() < 0.5 {
-                Side::Left
-            } else {
-                Side::Right
-            };
-            selection.update(location, side);
+            let location = self.selection_point(x, y, display_offset);
+            selection.update(location, self.selection_side(x));
         }
     }
 
+    fn selection_point(
+        &self,
+        x: f32,
+        y: f32,
+        display_offset: usize,
+    ) -> Point {
+        let col = (x as usize) / (self.size.cell_width as usize);
+        let col = min(Column(col), Column(self.size.num_cols as usize - 1));
+
+        let line = (y as usize) / (self.size.cell_height as usize);
+        let line = min(line, self.size.num_lines as usize - 1);
+
+        viewport_to_point(display_offset, Point::new(line, col))
+    }
+
     pub fn get_selection_range(&self) -> Option<SelectionRange> {
-        let term = self.term.lock_unfair();
+        let term = self.term.lock();
         if let Some(selection) = &term.selection {
             return selection.to_range(&term)
         }
 
         None
+    }
+
+    fn selection_side(&self, x: f32) -> Side {
+        let cell_x = x as usize % self.size.cell_width as usize;
+        let half_cell_width = (self.size.cell_width as f32 / 2.0) as usize;
+
+        if cell_x > half_cell_width {
+            Side::Right
+        } else {
+            Side::Left
+        }
     }
 
     pub fn resize(
@@ -145,36 +139,64 @@ impl Pty {
         font_height: f32,
     ) {
         if rows > 0 && cols > 0 {
-            let size = WindowSize {
+            self.size = WindowSize {
                 cell_width: font_width as u16,
                 cell_height: font_height as u16,
-                num_cols: cols,
-                num_lines: rows,
+                num_cols: cols as u16,
+                num_lines: rows as u16,
             };
 
-            self.notifier.on_resize(size);
-            self.term.lock_unfair().resize(TermSize::new(
-                size.num_cols as usize,
-                size.num_lines as usize,
+            self.notifier.on_resize(self.size.into());
+            self.term.lock().resize(TermSize::new(
+                self.size.num_cols as usize,
+                self.size.num_lines as usize,
             ));
         }
     }
 
+    pub fn size(&self) -> WindowSize {
+        self.size
+    }
+
     pub fn write_to_pty<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
         self.notifier.notify(input);
-        self.term.lock_unfair().scroll_display(Scroll::Bottom);
+        self.term.lock().scroll_display(Scroll::Bottom);
     }
 
     pub fn scroll(&mut self, delta_value: i32) {
         if delta_value != 0 {
             let scroll = Scroll::Delta(delta_value);
-            self.term.lock_unfair().grid_mut().scroll_display(scroll);
+            let mut term = self.term.lock();
+            if term.mode().contains(TermMode::ALTERNATE_SCROLL | TermMode::ALT_SCREEN) {
+                let line_cmd = if delta_value > 0 { b'A' } else { b'B' };
+                let mut content = vec![];
+
+                for _ in 0..delta_value.abs() {
+                    content.push(0x1b);
+                    content.push(b'O');
+                    content.push(line_cmd);
+                }
+
+                self.notifier.notify(content);
+            } else {
+                term.grid_mut().scroll_display(scroll);
+            }
         }
     }
 
-    pub fn renderable_content(&self) -> Grid<Cell> {
-        let term = self.term.lock_unfair();
-        term.grid().clone()
+    pub fn renderable_content(&self) -> (Grid<Cell>, Option<SelectionRange>, TermMode, WindowSize) {
+        let term = self.term.lock();
+        let mut selectable_range = None;
+        if let Some(selection) = &term.selection {
+            selectable_range = selection.to_range(&term)
+        }
+
+        (
+            term.grid().clone(),
+            selectable_range,
+            *term.mode(),
+            self.size
+        )
     }
 }
 
