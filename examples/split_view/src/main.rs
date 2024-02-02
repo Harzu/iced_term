@@ -62,12 +62,10 @@ impl Application for Example {
                     monospaced: false,
                     stretch: Stretch::Normal,
                 },
-                ..iced_term::FontSettings::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: env!("SHELL").to_string(),
-                ..iced_term::BackendSettings::default()
             },
         };
         let tab =
@@ -172,23 +170,23 @@ impl Application for Example {
                             );
                         }
                     },
-                    iced_term::Event::SelectStarted(id, selection_type, location) => {
+                    iced_term::Event::SelectStarted(
+                        id,
+                        selection_type,
+                        location,
+                    ) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(
-                                iced_term::Command::SelectStart(
-                                    selection_type,
-                                    location,
-                                ),
-                            );
+                            tab.update(iced_term::Command::SelectStart(
+                                selection_type,
+                                location,
+                            ));
                         }
                     },
                     iced_term::Event::SelectUpdated(id, location) => {
                         if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(
-                                iced_term::Command::SelectUpdate(
-                                    location,
-                                ),
-                            );
+                            tab.update(iced_term::Command::SelectUpdate(
+                                location,
+                            ));
                         }
                     },
                     _ => {},

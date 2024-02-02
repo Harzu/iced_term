@@ -52,12 +52,10 @@ impl Application for App {
                     monospaced: false,
                     stretch: Stretch::Normal,
                 },
-                ..iced_term::FontSettings::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: system_shell.to_string(),
-                ..iced_term::BackendSettings::default()
             },
         };
 
@@ -104,7 +102,7 @@ impl Application for App {
                             ),
                         );
                     },
-                    iced_term::Event::Ignored(_) => {},
+                    _ => {},
                 };
 
                 Command::none()

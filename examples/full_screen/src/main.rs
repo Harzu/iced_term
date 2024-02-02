@@ -51,12 +51,10 @@ impl Application for App {
                     monospaced: false,
                     stretch: Stretch::Normal,
                 },
-                ..iced_term::FontSettings::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: system_shell.to_string(),
-                ..iced_term::BackendSettings::default()
             },
         };
 
@@ -98,20 +96,19 @@ impl Application for App {
                             ),
                         );
                     },
-                    iced_term::Event::SelectStarted(_, selection_type, location) => {
-                        self.term.update(
-                            iced_term::Command::SelectStart(
-                                selection_type,
-                                location,
-                            ),
-                        );
+                    iced_term::Event::SelectStarted(
+                        _,
+                        selection_type,
+                        location,
+                    ) => {
+                        self.term.update(iced_term::Command::SelectStart(
+                            selection_type,
+                            location,
+                        ));
                     },
                     iced_term::Event::SelectUpdated(_, location) => {
-                        self.term.update(
-                            iced_term::Command::SelectUpdate(
-                                location,
-                            ),
-                        );
+                        self.term
+                            .update(iced_term::Command::SelectUpdate(location));
                     },
                     iced_term::Event::Ignored(_) => {},
                 };
