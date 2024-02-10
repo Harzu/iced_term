@@ -1,5 +1,7 @@
+use crate::backend::BackendCommand;
 use crate::bindings::{BindingAction, InputKind};
 use crate::term::{Event, Term, ViewProxy};
+use crate::Command;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
 use iced::alignment::{Horizontal, Vertical};
@@ -64,8 +66,8 @@ impl<'a> TermView<'a> {
         layout_position: Point,
         cursor_position: Point,
         event: iced::mouse::Event,
-    ) -> Event {
-        let mut term_event = Event::Ignored(self.term.id());
+    ) -> Option<Command> {
+        let mut cmd = None;
         match event {
             iced_core::mouse::Event::ButtonPressed(
                 iced_core::mouse::Button::Left,
@@ -79,24 +81,24 @@ impl<'a> TermView<'a> {
                 };
                 state.last_click = Some(current_click);
                 state.is_dragged = true;
-                term_event = Event::SelectStarted(
-                    self.term.id(),
-                    selction_type,
-                    (
-                        cursor_position.x - layout_position.x,
-                        cursor_position.y - layout_position.y,
-                    ),
-                )
-            },
-            iced_core::mouse::Event::CursorMoved { position: _ } => {
-                if state.is_dragged {
-                    term_event = Event::SelectUpdated(
-                        self.term.id(),
+                cmd = Some(Command::ProcessBackendCommand(
+                    BackendCommand::SelectStart(
+                        selction_type,
                         (
                             cursor_position.x - layout_position.x,
                             cursor_position.y - layout_position.y,
                         ),
-                    );
+                    ),
+                ));
+            },
+            iced_core::mouse::Event::CursorMoved { position } => {
+                if state.is_dragged {
+                    cmd = Some(Command::ProcessBackendCommand(
+                        BackendCommand::SelectUpdate((
+                            position.x - layout_position.x,
+                            position.y - layout_position.y,
+                        )),
+                    ));
                 }
             },
             iced_core::mouse::Event::ButtonReleased(
@@ -108,7 +110,9 @@ impl<'a> TermView<'a> {
                 ScrollDelta::Lines { x: _, y } => {
                     state.scroll_pixels = 0.0;
                     let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-                    term_event = Event::Scrolled(self.term.id(), lines)
+                    cmd = Some(Command::ProcessBackendCommand(
+                        BackendCommand::Scroll(lines as i32),
+                    ));
                 },
                 ScrollDelta::Pixels { x: _, y } => {
                     state.scroll_pixels -= y;
@@ -122,14 +126,15 @@ impl<'a> TermView<'a> {
                         lines += 1;
                         state.scroll_pixels -= line_height;
                     }
-
-                    term_event = Event::Scrolled(self.term.id(), -lines as f32)
+                    cmd = Some(Command::ProcessBackendCommand(
+                        BackendCommand::Scroll(-lines),
+                    ));
                 },
             },
             _ => {},
         }
 
-        term_event
+        cmd
     }
 
     fn handle_keyboard_event(
@@ -137,10 +142,10 @@ impl<'a> TermView<'a> {
         state: &mut TermViewState,
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         event: iced::keyboard::Event,
-    ) -> Event {
+    ) -> Option<Command> {
         if let Some(ref backend) = self.term.backend() {
             let mut binding_action = BindingAction::Ignore;
-
+            let last_content = backend.renderable_content();
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
                     state.keyboard_modifiers = m;
@@ -149,7 +154,7 @@ impl<'a> TermView<'a> {
                     binding_action = self.term.bindings().get_action(
                         InputKind::Char(c.to_ascii_lowercase()),
                         state.keyboard_modifiers,
-                        backend.mode(),
+                        last_content.terminal_mode,
                     );
 
                     if binding_action == BindingAction::Ignore
@@ -157,10 +162,11 @@ impl<'a> TermView<'a> {
                     {
                         let mut buf = [0, 0, 0, 0];
                         let str = c.encode_utf8(&mut buf);
-                        return Event::InputReceived(
-                            self.term.id(),
-                            str.as_bytes().to_vec(),
-                        );
+                        return Some(Command::ProcessBackendCommand(
+                            BackendCommand::WriteToBackend(
+                                str.as_bytes().to_vec(),
+                            ),
+                        ));
                     }
                 },
                 iced::keyboard::Event::KeyPressed {
@@ -170,7 +176,7 @@ impl<'a> TermView<'a> {
                     binding_action = self.term.bindings().get_action(
                         InputKind::KeyCode(key_code),
                         modifiers,
-                        backend.mode(),
+                        last_content.terminal_mode,
                     );
                 },
                 _ => {},
@@ -180,21 +186,21 @@ impl<'a> TermView<'a> {
                 BindingAction::Char(c) => {
                     let mut buf = [0, 0, 0, 0];
                     let str = c.encode_utf8(&mut buf);
-                    return Event::InputReceived(
-                        self.term.id(),
-                        str.as_bytes().to_vec(),
-                    );
+                    return Some(Command::ProcessBackendCommand(
+                        BackendCommand::WriteToBackend(str.as_bytes().to_vec()),
+                    ));
                 },
                 BindingAction::Esc(seq) => {
-                    return Event::InputReceived(
-                        self.term.id(),
-                        seq.as_bytes().to_vec(),
-                    )
+                    return Some(Command::ProcessBackendCommand(
+                        BackendCommand::WriteToBackend(seq.as_bytes().to_vec()),
+                    ));
                 },
                 BindingAction::Paste => {
                     if let Some(data) = clipboard.read() {
                         let input: Vec<u8> = data.bytes().collect();
-                        return Event::InputReceived(self.term.id(), input);
+                        return Some(Command::ProcessBackendCommand(
+                            BackendCommand::WriteToBackend(input),
+                        ));
                     }
                 },
                 BindingAction::Copy => {
@@ -204,7 +210,7 @@ impl<'a> TermView<'a> {
             };
         }
 
-        Event::Ignored(self.term.id())
+        None
     }
 }
 
@@ -362,19 +368,22 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         let layout_size = layout.bounds().size();
         if state.size != layout_size && self.term.backend().is_some() {
             state.size = layout_size;
-            shell.publish(Event::Resized(self.term.id(), layout_size));
+            let cmd = Command::ProcessBackendCommand(BackendCommand::Resize(
+                layout_size,
+            ));
+            shell.publish(Event::CommandReceived(self.term.id(), cmd));
         }
 
         if !state.is_focused {
             return iced::event::Status::Ignored;
         }
 
-        let mut term_event = Event::Ignored(self.term.id());
+        let mut cmd = None;
         match event {
             iced::Event::Mouse(mouse_event) => {
                 if self.is_cursor_in_layout(cursor, layout) {
                     let cursor_position = cursor.position().unwrap();
-                    term_event = self.handle_mouse_event(
+                    cmd = self.handle_mouse_event(
                         state,
                         layout.position(),
                         cursor_position,
@@ -383,16 +392,16 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                 }
             },
             iced::Event::Keyboard(keyboard_event) => {
-                term_event =
+                cmd =
                     self.handle_keyboard_event(state, clipboard, keyboard_event)
             },
             _ => {},
         };
 
-        match term_event {
-            Event::Ignored(_) => iced::event::Status::Ignored,
-            e => {
-                shell.publish(e);
+        match cmd {
+            None => iced::event::Status::Ignored,
+            Some(c) => {
+                shell.publish(Event::CommandReceived(self.term.id(), c));
                 iced::event::Status::Captured
             },
         }

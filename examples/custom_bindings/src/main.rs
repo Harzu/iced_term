@@ -116,31 +116,11 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
             Message::FontLoaded(_) => Command::none(),
-            Message::IcedTermEvent(event) => {
-                match event {
-                    iced_term::Event::InputReceived(_, input) => {
-                        self.term
-                            .update(iced_term::Command::WriteToBackend(input));
-                    },
-                    iced_term::Event::Scrolled(_, delta) => self
-                        .term
-                        .update(iced_term::Command::Scroll(delta as i32)),
-                    iced_term::Event::Resized(_, size) => {
-                        self.term.update(iced_term::Command::Resize(size));
-                    },
-                    iced_term::Event::BackendEventSenderReceived(_, tx) => {
-                        self.term.update(iced_term::Command::InitBackend(tx));
-                    },
-                    iced_term::Event::BackendEventReceived(_, inner_event) => {
-                        self.term.update(
-                            iced_term::Command::ProcessBackendEvent(
-                                inner_event,
-                            ),
-                        );
-                    },
-                    _ => {},
-                };
-
+            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+                _,
+                cmd,
+            )) => {
+                self.term.update(cmd);
                 Command::none()
             },
         }

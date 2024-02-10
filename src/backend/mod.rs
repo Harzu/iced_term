@@ -20,6 +20,18 @@ use std::io::Result;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+use crate::actions::Action;
+
+#[derive(Debug, Clone)]
+pub enum BackendCommand {
+    WriteToBackend(Vec<u8>),
+    Scroll(i32),
+    Resize(Size<f32>),
+    SelectStart(SelectionType, (f32, f32)),
+    SelectUpdate((f32, f32)),
+    ProcessPtyEvent(alacritty_terminal::event::Event),
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct TerminalSize {
     pub cell_width: u16,
@@ -76,6 +88,7 @@ pub struct Backend {
     term: Arc<FairMutex<Term<EventProxy>>>,
     size: TerminalSize,
     notifier: Notifier,
+    last_content: RenderableContent,
 }
 
 impl Backend {
@@ -98,12 +111,16 @@ impl Backend {
 
         let pty = tty::new(&pty_config, terminal_size.into(), id)?;
         let event_proxy = EventProxy(event_sender);
-        let term = Arc::new(FairMutex::new(Term::new(
-            config,
-            &terminal_size,
-            event_proxy.clone(),
-        )));
 
+        let term = Term::new(config, &terminal_size, event_proxy.clone());
+        let initial_content = RenderableContent {
+            grid: term.grid().clone(),
+            selectable_range: None,
+            terminal_mode: *term.mode(),
+            terminal_size,
+        };
+
+        let term = Arc::new(FairMutex::new(term));
         let pty_event_loop =
             EventLoop::new(term.clone(), event_proxy, pty, false, false);
         let notifier = Notifier(pty_event_loop.channel());
@@ -113,34 +130,85 @@ impl Backend {
             term: term.clone(),
             size: terminal_size,
             notifier,
+            last_content: initial_content,
         })
     }
 
-    pub fn mode(&self) -> TermMode {
-        *self.term.lock().mode()
+    pub fn process_command(&mut self, cmd: BackendCommand) -> Action {
+        let mut action = Action::Ignore;
+        let term = self.term.clone();
+        let mut term = term.lock();
+        match cmd {
+            BackendCommand::ProcessPtyEvent(event) => {
+                match event {
+                    Event::Wakeup => {
+                        self.internal_sync(&term);
+                        action = Action::Redraw;
+                    },
+                    Event::Exit => {
+                        action = Action::Shutdown;
+                    },
+                    _ => {},
+                };
+            },
+            BackendCommand::WriteToBackend(input) => {
+                self.write_to_pty(input);
+                term.scroll_display(Scroll::Bottom);
+            },
+            BackendCommand::Scroll(delta) => {
+                self.scroll(&mut term, delta);
+                action = Action::Redraw;
+            },
+            BackendCommand::Resize(size) => {
+                self.resize(
+                    &mut term,
+                    size.width,
+                    size.height,
+                    self.size.cell_width,
+                    self.size.cell_height,
+                );
+            },
+            BackendCommand::SelectStart(selection_type, (x, y)) => {
+                self.start_selection(&mut term, selection_type, x, y);
+                action = Action::Redraw;
+            },
+            BackendCommand::SelectUpdate((x, y)) => {
+                self.update_selection(&mut term, x, y);
+                action = Action::Redraw;
+            },
+        };
+
+        action
     }
 
     pub fn start_selection(
         &mut self,
+        terminal: &mut Term<EventProxy>,
         selection_type: SelectionType,
         x: f32,
         y: f32,
     ) {
-        let mut term = self.term.lock();
-        let location = self.selection_point(x, y, term.grid().display_offset());
-        term.selection = Some(Selection::new(
+        let location =
+            self.selection_point(x, y, terminal.grid().display_offset());
+        terminal.selection = Some(Selection::new(
             selection_type,
             location,
             self.selection_side(x),
-        ))
+        ));
+        self.internal_sync(terminal);
     }
 
-    pub fn update_selection(&mut self, x: f32, y: f32) {
-        let mut term = self.term.lock();
-        let display_offset = term.grid().display_offset();
-        if let Some(ref mut selection) = term.selection {
+    pub fn update_selection(
+        &mut self,
+        terminal: &mut Term<EventProxy>,
+        x: f32,
+        y: f32,
+    ) {
+        let display_offset = terminal.grid().display_offset();
+        if let Some(ref mut selection) = terminal.selection {
             let location = self.selection_point(x, y, display_offset);
             selection.update(location, self.selection_side(x));
+            self.internal_sync(terminal);
         }
     }
 
@@ -167,6 +235,7 @@ impl Backend {
 
     pub fn resize(
         &mut self,
+        terminal: &mut Term<EventProxy>,
         layout_width: f32,
         layout_height: f32,
         cell_width: u16,
@@ -183,7 +252,7 @@ impl Backend {
             };
 
             self.notifier.on_resize(self.size.into());
-            self.term.lock().resize(TermSize::new(
+            terminal.resize(TermSize::new(
                 self.size.num_cols as usize,
                 self.size.num_lines as usize,
             ));
@@ -192,14 +261,16 @@ impl Backend {
 
     pub fn write_to_pty<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
         self.notifier.notify(input);
-        self.term.lock().scroll_display(Scroll::Bottom);
     }
 
-    pub fn scroll(&mut self, delta_value: i32) {
+    pub fn scroll(
+        &mut self,
+        terminal: &mut Term<EventProxy>,
+        delta_value: i32,
+    ) {
         if delta_value != 0 {
             let scroll = Scroll::Delta(delta_value);
-            let mut term = self.term.lock();
-            if term
+            if terminal
                 .mode()
                 .contains(TermMode::ALTERNATE_SCROLL | TermMode::ALT_SCREEN)
             {
@@ -214,8 +285,9 @@ impl Backend {
 
                 self.notifier.notify(content);
             } else {
-                term.grid_mut().scroll_display(scroll);
+                terminal.grid_mut().scroll_display(scroll);
             }
+            self.internal_sync(terminal);
         }
     }
 
@@ -232,19 +304,28 @@ impl Backend {
         result
     }
 
-    pub fn renderable_content(&self) -> RenderableContent {
-        let term = self.term.lock();
-        let selectable_range = match &term.selection {
-            Some(s) => s.to_range(&term),
+    pub fn sync(&mut self) {
+        let term = self.term.clone();
+        let term = term.lock();
+        self.internal_sync(&term);
+    }
+
+    fn internal_sync(&mut self, terminal: &Term<EventProxy>) {
+        let selectable_range = match &terminal.selection {
+            Some(s) => s.to_range(terminal),
             None => None,
         };
 
-        RenderableContent {
-            grid: term.grid().clone(),
+        self.last_content = RenderableContent {
+            grid: terminal.grid().clone(),
             selectable_range,
-            terminal_mode: *term.mode(),
+            terminal_mode: *terminal.mode(),
             terminal_size: self.size,
         }
+    }
+
+    pub fn renderable_content(&self) -> &RenderableContent {
+        &self.last_content
     }
 }
 

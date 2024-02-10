@@ -1,3 +1,4 @@
+pub mod actions;
 mod backend;
 pub mod bindings;
 mod font;

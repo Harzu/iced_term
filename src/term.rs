@@ -1,37 +1,26 @@
+use crate::actions::Action;
+use crate::backend::BackendCommand;
 use crate::backend::{settings::BackendSettings, Backend};
 use crate::bindings::{Binding, BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::theme::TermTheme;
 use crate::{ColorPalette, FontSettings};
-use alacritty_terminal::selection::SelectionType;
 use iced::futures::SinkExt;
 use iced::widget::canvas::Cache;
-use iced::{Size, Subscription};
+use iced::Subscription;
 use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    Scrolled(u64, f32),
-    Resized(u64, Size<f32>),
-    Ignored(u64),
-    InputReceived(u64, Vec<u8>),
-    SelectStarted(u64, SelectionType, (f32, f32)),
-    SelectUpdated(u64, (f32, f32)),
-    BackendEventSenderReceived(u64, Sender<alacritty_terminal::event::Event>),
-    BackendEventReceived(u64, alacritty_terminal::event::Event),
+    CommandReceived(u64, Command),
 }
 
 #[derive(Debug, Clone)]
 pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
-    WriteToBackend(Vec<u8>),
-    Scroll(i32),
     ChangeTheme(Box<ColorPalette>),
     AddBindings(Vec<(Binding<InputKind>, BindingAction)>),
-    Resize(Size<f32>),
-    SelectStart(SelectionType, (f32, f32)),
-    SelectUpdate((f32, f32)),
-    ProcessBackendEvent(alacritty_terminal::event::Event),
+    ProcessBackendCommand(BackendCommand),
 }
 
 #[derive(Default, Clone)]
@@ -107,27 +96,32 @@ impl Term {
         let id = self.id;
         iced::subscription::channel(id, 100, move |mut output| async move {
             let (event_tx, mut event_rx) = mpsc::channel(100);
+            let cmd = Command::InitBackend(event_tx);
             output
-                .send(Event::BackendEventSenderReceived(id, event_tx))
+                .send(Event::CommandReceived(id, cmd))
                 .await
                 .unwrap_or_else(|_| {
-                    panic!("ICED SUBSCRIPTION {}: sending BackendEventSenderReceived event is failed", id)
+                    panic!("iced_term subscription {}: sending BackendEventSenderReceived event is failed", id)
                 });
 
             while let Some(event) = event_rx.recv().await {
+                let cmd = Command::ProcessBackendCommand(
+                    BackendCommand::ProcessPtyEvent(event),
+                );
                 output
-                    .send(Event::BackendEventReceived(id, event))
+                    .send(Event::CommandReceived(id, cmd))
                     .await
                     .unwrap_or_else(|_| {
-                        panic!("ICED SUBSCRIPTION {}: sending BackendEventReceived event is failed", id)
+                        panic!("iced_term subscription {}: sending BackendEventReceived event is failed", id)
                     });
             }
 
-            panic!("ICED SUBSCRIPTION {}: terminal event channel closed unexpected", id);
+            panic!("iced_term subscription {}: terminal event channel closed unexpected", id);
         })
     }
 
-    pub fn update(&mut self, cmd: Command) {
+    pub fn update(&mut self, cmd: Command) -> Action {
+        let mut action = Action::Ignore;
         match cmd {
             Command::InitBackend(sender) => {
                 self.backend = Some(
@@ -142,53 +136,29 @@ impl Term {
                     }),
                 );
             },
-            Command::ProcessBackendEvent(event) => {
-                if let alacritty_terminal::event::Event::Wakeup = event {
-                    self.cache.clear();
-                }
-            },
-            Command::WriteToBackend(input) => {
-                if let Some(ref mut backend) = self.backend {
-                    backend.write_to_pty(input);
-                }
-            },
-            Command::Scroll(delta) => {
-                if let Some(ref mut backend) = self.backend {
-                    backend.scroll(delta);
-                    self.cache.clear();
-                }
-            },
-            Command::Resize(size) => {
-                if let Some(ref mut backend) = self.backend {
-                    let font_size = self.font.measure();
-                    backend.resize(
-                        size.width,
-                        size.height,
-                        font_size.width as u16,
-                        font_size.height as u16,
-                    );
-                    self.cache.clear();
-                }
-            },
             Command::ChangeTheme(palette) => {
-                self.theme = TermTheme::new(palette);
-                self.cache.clear();
+                if let Some(ref mut backend) = self.backend {
+                    self.theme = TermTheme::new(palette);
+                    backend.sync();
+                    self.cache.clear();
+                }
             },
             Command::AddBindings(bindings) => {
                 self.bindings.add_bindings(bindings);
             },
-            Command::SelectStart(selection_type, (x, y)) => {
+            Command::ProcessBackendCommand(c) => {
                 if let Some(ref mut backend) = self.backend {
-                    backend.start_selection(selection_type, x, y);
-                    self.cache.clear();
-                }
-            },
-            Command::SelectUpdate((x, y)) => {
-                if let Some(ref mut backend) = self.backend {
-                    backend.update_selection(x, y);
-                    self.cache.clear();
+                    match backend.process_command(c) {
+                        Action::Redraw => self.cache.clear(),
+                        Action::Shutdown => {
+                            action = Action::Shutdown;
+                        },
+                        _ => {},
+                    }
                 }
             },
         }
+
+        action
     }
 }

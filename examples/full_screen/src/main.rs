@@ -74,46 +74,12 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
             Message::FontLoaded(_) => Command::none(),
-            Message::IcedTermEvent(event) => {
-                match event {
-                    iced_term::Event::InputReceived(_, input) => {
-                        self.term
-                            .update(iced_term::Command::WriteToBackend(input));
-                    },
-                    iced_term::Event::Scrolled(_, delta) => self
-                        .term
-                        .update(iced_term::Command::Scroll(delta as i32)),
-                    iced_term::Event::Resized(_, size) => {
-                        self.term.update(iced_term::Command::Resize(size));
-                    },
-                    iced_term::Event::BackendEventSenderReceived(_, tx) => {
-                        self.term.update(iced_term::Command::InitBackend(tx));
-                    },
-                    iced_term::Event::BackendEventReceived(_, inner_event) => {
-                        self.term.update(
-                            iced_term::Command::ProcessBackendEvent(
-                                inner_event,
-                            ),
-                        );
-                    },
-                    iced_term::Event::SelectStarted(
-                        _,
-                        selection_type,
-                        location,
-                    ) => {
-                        self.term.update(iced_term::Command::SelectStart(
-                            selection_type,
-                            location,
-                        ));
-                    },
-                    iced_term::Event::SelectUpdated(_, location) => {
-                        self.term
-                            .update(iced_term::Command::SelectUpdate(location));
-                    },
-                    iced_term::Event::Ignored(_) => {},
-                };
-
-                Command::none()
+            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+                _,
+                cmd,
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => window::close(),
+                _ => Command::none(),
             },
         }
     }

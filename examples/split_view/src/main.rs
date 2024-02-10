@@ -139,58 +139,13 @@ impl Application for Example {
                     return TermView::focus(new_focused_tab.widget_id());
                 }
             },
-            Message::IcedTermEvent(event) => {
-                match event {
-                    iced_term::Event::InputReceived(id, data) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::WriteToBackend(data))
-                        }
-                    },
-                    iced_term::Event::Scrolled(id, delta) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::Scroll(delta as i32))
-                        }
-                    },
-                    iced_term::Event::Resized(id, size) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::Resize(size));
-                        }
-                    },
-                    iced_term::Event::BackendEventSenderReceived(id, tx) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::InitBackend(tx));
-                        }
-                    },
-                    iced_term::Event::BackendEventReceived(id, inner_event) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(
-                                iced_term::Command::ProcessBackendEvent(
-                                    inner_event,
-                                ),
-                            );
-                        }
-                    },
-                    iced_term::Event::SelectStarted(
-                        id,
-                        selection_type,
-                        location,
-                    ) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::SelectStart(
-                                selection_type,
-                                location,
-                            ));
-                        }
-                    },
-                    iced_term::Event::SelectUpdated(id, location) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::SelectUpdate(
-                                location,
-                            ));
-                        }
-                    },
-                    _ => {},
-                };
+            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+                id,
+                cmd,
+            )) => {
+                if let Some(tab) = self.tabs.get_mut(&id) {
+                    tab.update(cmd);
+                }
             },
         }
 
