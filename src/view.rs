@@ -1,7 +1,10 @@
+use std::ops::Index;
+
 use crate::backend::BackendCommand;
 use crate::bindings::{BindingAction, InputKind};
 use crate::term::{Event, Term, ViewProxy};
 use crate::Command;
+use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
 use iced::alignment::{Horizontal, Vertical};
@@ -14,7 +17,7 @@ use iced_core::mouse::{self, Click};
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
-use iced_graphics::geometry::Renderer;
+use iced_graphics::geometry::{Renderer, Stroke};
 
 pub struct TermView<'a> {
     term: &'a Term,
@@ -68,70 +71,94 @@ impl<'a> TermView<'a> {
         event: iced::mouse::Event,
     ) -> Option<Command> {
         let mut cmd = None;
-        match event {
-            iced_core::mouse::Event::ButtonPressed(
-                iced_core::mouse::Button::Left,
-            ) => {
-                let current_click =
-                    Click::new(cursor_position, state.last_click);
-                let selction_type = match current_click.kind() {
-                    mouse::click::Kind::Single => SelectionType::Simple,
-                    mouse::click::Kind::Double => SelectionType::Semantic,
-                    mouse::click::Kind::Triple => SelectionType::Lines,
-                };
-                state.last_click = Some(current_click);
-                state.is_dragged = true;
-                cmd = Some(Command::ProcessBackendCommand(
-                    BackendCommand::SelectStart(
-                        selction_type,
-                        (
-                            cursor_position.x - layout_position.x,
-                            cursor_position.y - layout_position.y,
+        if let Some(ref backend) = self.term.backend() {
+            let terminal_content = backend.renderable_content();
+            match event {
+                iced_core::mouse::Event::ButtonPressed(
+                    iced_core::mouse::Button::Left,
+                ) => {
+                    let current_click =
+                        Click::new(cursor_position, state.last_click);
+                    let selction_type = match current_click.kind() {
+                        mouse::click::Kind::Single => SelectionType::Simple,
+                        mouse::click::Kind::Double => SelectionType::Semantic,
+                        mouse::click::Kind::Triple => SelectionType::Lines,
+                    };
+                    state.last_click = Some(current_click);
+                    state.is_dragged = true;
+                    cmd = Some(Command::ProcessBackendCommand(
+                        BackendCommand::SelectStart(
+                            selction_type,
+                            (
+                                cursor_position.x - layout_position.x,
+                                cursor_position.y - layout_position.y,
+                            ),
                         ),
-                    ),
-                ));
-            },
-            iced_core::mouse::Event::CursorMoved { position } => {
-                if state.is_dragged {
-                    cmd = Some(Command::ProcessBackendCommand(
-                        BackendCommand::SelectUpdate((
-                            position.x - layout_position.x,
-                            position.y - layout_position.y,
-                        )),
-                    ));
-                }
-            },
-            iced_core::mouse::Event::ButtonReleased(
-                iced_core::mouse::Button::Left,
-            ) => {
-                state.is_dragged = false;
-            },
-            iced::mouse::Event::WheelScrolled { delta } => match delta {
-                ScrollDelta::Lines { x: _, y } => {
-                    state.scroll_pixels = 0.0;
-                    let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-                    cmd = Some(Command::ProcessBackendCommand(
-                        BackendCommand::Scroll(lines as i32),
                     ));
                 },
-                ScrollDelta::Pixels { x: _, y } => {
-                    state.scroll_pixels -= y;
-                    let mut lines = 0;
-                    let line_height = self.term.font().measure().height;
-                    while state.scroll_pixels <= -line_height {
-                        lines -= 1;
-                        state.scroll_pixels += line_height;
+                iced_core::mouse::Event::CursorMoved { position } => {
+                    let cursor_x = position.x - layout_position.x;
+                    let cursor_y = position.y - layout_position.y;
+                    state.mouse_position_on_grid = backend.selection_point(
+                        cursor_x,
+                        cursor_y,
+                        terminal_content.grid.display_offset()
+                    );
+
+                    if state.is_dragged {
+                        cmd = Some(Command::ProcessBackendCommand(
+                            BackendCommand::SelectUpdate((
+                                cursor_x,
+                                cursor_y,
+                            )),
+                        ));
                     }
-                    while state.scroll_pixels >= line_height {
-                        lines += 1;
-                        state.scroll_pixels -= line_height;
-                    }
-                    cmd = Some(Command::ProcessBackendCommand(
-                        BackendCommand::Scroll(-lines),
-                    ));
                 },
-            },
-            _ => {},
+                iced_core::mouse::Event::ButtonReleased(
+                    iced_core::mouse::Button::Left,
+                ) => {
+                    match self.term.bindings().get_action(
+                        InputKind::Mouse(iced_core::mouse::Button::Left),
+                        state.keyboard_modifiers,
+                        terminal_content.terminal_mode,
+                    ) {
+                        BindingAction::LinkProcess => {
+                            cmd = Some(Command::ProcessBackendCommand(
+                                BackendCommand::MatchWord(state.mouse_position_on_grid),
+                            ));
+                        }
+                        _ => {
+                            state.is_dragged = false;
+                        }
+                    }
+                },
+                iced::mouse::Event::WheelScrolled { delta } => match delta {
+                    ScrollDelta::Lines { x: _, y } => {
+                        state.scroll_pixels = 0.0;
+                        let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
+                        cmd = Some(Command::ProcessBackendCommand(
+                            BackendCommand::Scroll(lines as i32),
+                        ));
+                    },
+                    ScrollDelta::Pixels { x: _, y } => {
+                        state.scroll_pixels -= y;
+                        let mut lines = 0;
+                        let line_height = self.term.font().measure().height;
+                        while state.scroll_pixels <= -line_height {
+                            lines -= 1;
+                            state.scroll_pixels += line_height;
+                        }
+                        while state.scroll_pixels >= line_height {
+                            lines += 1;
+                            state.scroll_pixels -= line_height;
+                        }
+                        cmd = Some(Command::ProcessBackendCommand(
+                            BackendCommand::Scroll(-lines),
+                        ));
+                    },
+                },
+                _ => {},
+            }
         }
 
         cmd
@@ -256,7 +283,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
 
     fn draw(
         &self,
-        _tree: &Tree,
+        tree: &Tree,
         renderer: &mut iced::Renderer<Theme>,
         _theme: &Theme,
         _style: &iced::advanced::renderer::Style,
@@ -264,6 +291,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
+        let state = tree.state.downcast_ref::<TermViewState>();
         let geom = self.term.cache().draw(renderer, viewport.size(), |frame| {
             if let Some(ref backend) = self.term.backend() {
                 let content = backend.renderable_content();
@@ -303,6 +331,16 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                         size,
                     );
                     frame.fill(&background, bg);
+
+                    if state.mouse_position_on_grid == indexed.point {
+                        // println!("Hyperlink");
+                        frame.stroke(
+                            &background, 
+                            Stroke::default()
+                                .with_color(fg)
+                                .with_width(2.0)
+                        )
+                    }
 
                     if content.grid.cursor.point == indexed.point {
                         let cursor_rect = Path::rectangle(
@@ -444,6 +482,7 @@ pub struct TermViewState {
     scroll_pixels: f32,
     keyboard_modifiers: Modifiers,
     size: Size<f32>,
+    mouse_position_on_grid: TerminalGridPoint
 }
 
 impl TermViewState {
@@ -455,6 +494,7 @@ impl TermViewState {
             scroll_pixels: 0.0,
             keyboard_modifiers: Modifiers::empty(),
             size: Size::from([0.0, 0.0]),
+            mouse_position_on_grid: TerminalGridPoint::default(),
         }
     }
 }

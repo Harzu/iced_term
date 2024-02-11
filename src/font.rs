@@ -3,7 +3,7 @@ use iced::{Font, Size, Theme};
 use iced_graphics::renderer::Renderer;
 use iced_tiny_skia::{Backend, Settings};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FontSettings {
     pub size: f32,
     pub font_type: Font,
@@ -26,7 +26,7 @@ pub struct TermFont {
 }
 
 impl TermFont {
-    pub fn new(settings: FontSettings) -> Self {
+    pub fn new(settings: Box<FontSettings>) -> Self {
         Self {
             size: settings.size,
             font_type: settings.font_type,

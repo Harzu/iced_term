@@ -1,5 +1,5 @@
 use alacritty_terminal::term::TermMode;
-use iced_core::keyboard::{KeyCode, Modifiers};
+use iced_core::{keyboard::{KeyCode, Modifiers}, mouse::Button};
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
 pub enum BindingAction {
@@ -7,6 +7,7 @@ pub enum BindingAction {
     Paste,
     Char(char),
     Esc(String),
+    LinkProcess,
     Ignore,
 }
 
@@ -14,6 +15,7 @@ pub enum BindingAction {
 pub enum InputKind {
     Char(char),
     KeyCode(KeyCode),
+    Mouse(Button),
 }
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
@@ -25,6 +27,7 @@ pub struct Binding<T> {
 }
 
 pub type KeyboardBinding = Binding<InputKind>;
+pub type MouseBinding = Binding<InputKind>;
 
 #[macro_export]
 macro_rules! generate_bindings {
@@ -46,6 +49,9 @@ macro_rules! generate_bindings {
             (KeyboardBinding, $key:ident) => {{
                 InputKind::KeyCode(KeyCode::$key)
             }};
+            (MouseBinding, $key:ident) => {{
+                InputKind::Mouse(Button::$key)
+            }}
         }
 
         let mut v = Vec::new();
@@ -89,6 +95,7 @@ impl BindingsLayout {
             layout: default_keyboard_bindings(),
         };
         layout.add_bindings(platform_keyboard_bindings());
+        layout.add_bindings(mouse_default_bindings());
         layout
     }
 
@@ -330,6 +337,13 @@ fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
         KeyboardBinding;
         C, Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Copy;
         V, Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Paste;
+    )
+}
+
+fn mouse_default_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
+    generate_bindings!(
+        MouseBinding;
+        Left, Modifiers::CTRL; BindingAction::LinkProcess;
     )
 }
 

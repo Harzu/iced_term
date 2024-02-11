@@ -5,9 +5,10 @@ use alacritty_terminal::event::{
 };
 use alacritty_terminal::event_loop::{EventLoop, Msg, Notifier};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::index::{Column, Direction, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionRange, SelectionType};
 use alacritty_terminal::sync::FairMutex;
+use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{
     self, cell::Cell, test::TermSize, viewport_to_point, Term, TermMode,
 };
@@ -29,6 +30,7 @@ pub enum BackendCommand {
     Resize(Size<f32>),
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
+    MatchWord(Point),
     ProcessAlacrittyEvent(Event),
 }
 
@@ -89,6 +91,8 @@ pub struct Backend {
     size: TerminalSize,
     notifier: Notifier,
     last_content: RenderableContent,
+    pub url_regex: RegexSearch,
+    pub word_regex: RegexSearch,
 }
 
 impl Backend {
@@ -128,11 +132,16 @@ impl Backend {
         let notifier = Notifier(pty_event_loop.channel());
         let _pty_join_handle = pty_event_loop.spawn();
 
+        let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
+        let word_regex = RegexSearch::new(r#"[\w.\[\]:/@\-~]+"#).unwrap();
+
         Ok(Self {
             term: term.clone(),
             size: terminal_size,
             notifier,
             last_content: initial_content,
+            url_regex,
+            word_regex,
         })
     }
 
@@ -178,6 +187,10 @@ impl Backend {
                 self.update_selection(&mut term, x, y);
                 action = Action::Redraw;
             },
+            BackendCommand::MatchWord(point) => {
+                let x = self.regex_match_at(&term, point, &mut self.url_regex.clone());
+                println!("{:?}", x);
+            }
         };
 
         action
@@ -214,7 +227,7 @@ impl Backend {
         }
     }
 
-    fn selection_point(&self, x: f32, y: f32, display_offset: usize) -> Point {
+    pub fn selection_point(&self, x: f32, y: f32, display_offset: usize) -> Point {
         let col = (x as usize) / (self.size.cell_width as usize);
         let col = min(Column(col), Column(self.size.num_cols as usize - 1));
 
@@ -331,6 +344,31 @@ impl Backend {
     pub fn renderable_content(&self) -> &RenderableContent {
         &self.last_content
     }
+
+    /// Based on alacritty/src/display/hint.rs > regex_match_at
+    /// Retrieve the match, if the specified point is inside the content matching the regex.
+    pub fn regex_match_at(&self, terminal: &Term<EventProxy>, point: Point, regex: &mut RegexSearch) -> Option<Match> {
+        let x = visible_regex_match_iter(&terminal, regex).find(|rm| rm.contains(&point));
+        x
+    }
+}
+
+/// Copied from alacritty/src/display/hint.rs:
+/// Iterate over all visible regex matches.
+pub fn visible_regex_match_iter<'a>(
+    term: &'a Term<EventProxy>,
+    regex: &'a mut RegexSearch,
+) -> impl Iterator<Item = Match> + 'a {
+    let viewport_start = Line(-(term.grid().display_offset() as i32));
+    let viewport_end = viewport_start + term.bottommost_line();
+    let mut start = term.line_search_left(Point::new(viewport_start, Column(0)));
+    let mut end = term.line_search_right(Point::new(viewport_end, Column(0)));
+    start.line = start.line.max(viewport_start - 100);
+    end.line = end.line.min(viewport_end + 100);
+
+    RegexIter::new(start, end, Direction::Right, term, regex)
+        .skip_while(move |rm| rm.end().line < viewport_start)
+        .take_while(move |rm| rm.start().line <= viewport_end)
 }
 
 pub struct RenderableContent {
