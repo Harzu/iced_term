@@ -145,6 +145,7 @@ impl<'a> TermView<'a> {
     ) -> Option<Command> {
         if let Some(ref backend) = self.term.backend() {
             let mut binding_action = BindingAction::Ignore;
+            println!("{:?}", backend.renderable_content().terminal_mode);
             let last_content = backend.renderable_content();
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
@@ -163,7 +164,7 @@ impl<'a> TermView<'a> {
                         let mut buf = [0, 0, 0, 0];
                         let str = c.encode_utf8(&mut buf);
                         return Some(Command::ProcessBackendCommand(
-                            BackendCommand::WriteToBackend(
+                            BackendCommand::Write(
                                 str.as_bytes().to_vec(),
                             ),
                         ));
@@ -187,19 +188,19 @@ impl<'a> TermView<'a> {
                     let mut buf = [0, 0, 0, 0];
                     let str = c.encode_utf8(&mut buf);
                     return Some(Command::ProcessBackendCommand(
-                        BackendCommand::WriteToBackend(str.as_bytes().to_vec()),
+                        BackendCommand::Write(str.as_bytes().to_vec()),
                     ));
                 },
                 BindingAction::Esc(seq) => {
                     return Some(Command::ProcessBackendCommand(
-                        BackendCommand::WriteToBackend(seq.as_bytes().to_vec()),
+                        BackendCommand::Write(seq.as_bytes().to_vec()),
                     ));
                 },
                 BindingAction::Paste => {
                     if let Some(data) = clipboard.read() {
                         let input: Vec<u8> = data.bytes().collect();
                         return Some(Command::ProcessBackendCommand(
-                            BackendCommand::WriteToBackend(input),
+                            BackendCommand::Write(input),
                         ));
                     }
                 },
@@ -280,6 +281,12 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                     let mut fg = self.term.theme().get_color(indexed.fg);
                     let mut bg = self.term.theme().get_color(indexed.bg);
 
+                    if indexed.cell.flags.intersects(cell::Flags::DIM)
+                        || indexed.cell.flags.intersects(cell::Flags::DIM_BOLD)
+                    {
+                        fg.a *= 0.7;
+                    }
+
                     if indexed.cell.flags.contains(cell::Flags::INVERSE) {
                         std::mem::swap(&mut fg, &mut bg);
                     }
@@ -314,11 +321,9 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                             },
                             Size::new(cell_width as f32, cell_height as f32),
                         );
-
-                        if !content.terminal_mode.contains(TermMode::ALT_SCREEN)
-                        {
-                            frame.fill(&cursor_rect, fg);
-                        }
+                        
+                        let cursor_color = self.term.theme().get_color(content.cursor.fg);
+                        frame.fill(&cursor_rect, cursor_color);
                     }
 
                     if indexed.c != ' ' && indexed.c != '\t' {

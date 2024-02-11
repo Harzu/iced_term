@@ -24,12 +24,12 @@ use crate::actions::Action;
 
 #[derive(Debug, Clone)]
 pub enum BackendCommand {
-    WriteToBackend(Vec<u8>),
+    Write(Vec<u8>),
     Scroll(i32),
     Resize(Size<f32>),
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
-    ProcessPtyEvent(alacritty_terminal::event::Event),
+    ProcessAlacrittyEvent(Event),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -112,12 +112,14 @@ impl Backend {
         let pty = tty::new(&pty_config, terminal_size.into(), id)?;
         let event_proxy = EventProxy(event_sender);
 
-        let term = Term::new(config, &terminal_size, event_proxy.clone());
+        let mut term = Term::new(config, &terminal_size, event_proxy.clone());
+        let cursor = term.grid_mut().cursor_cell().clone();
         let initial_content = RenderableContent {
             grid: term.grid().clone(),
             selectable_range: None,
             terminal_mode: *term.mode(),
             terminal_size,
+            cursor: cursor.clone(),
         };
 
         let term = Arc::new(FairMutex::new(term));
@@ -139,10 +141,10 @@ impl Backend {
         let term = self.term.clone();
         let mut term = term.lock();
         match cmd {
-            BackendCommand::ProcessPtyEvent(event) => {
+            BackendCommand::ProcessAlacrittyEvent(event) => {
                 match event {
                     Event::Wakeup => {
-                        self.internal_sync(&term);
+                        self.internal_sync(&mut term);
                         action = Action::Redraw;
                     },
                     Event::Exit => {
@@ -151,8 +153,8 @@ impl Backend {
                     _ => {},
                 };
             },
-            BackendCommand::WriteToBackend(input) => {
-                self.write_to_pty(input);
+            BackendCommand::Write(input) => {
+                self.write(input);
                 term.scroll_display(Scroll::Bottom);
             },
             BackendCommand::Scroll(delta) => {
@@ -259,7 +261,7 @@ impl Backend {
         }
     }
 
-    pub fn write_to_pty<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
+    pub fn write<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
         self.notifier.notify(input);
     }
 
@@ -306,19 +308,21 @@ impl Backend {
 
     pub fn sync(&mut self) {
         let term = self.term.clone();
-        let term = term.lock();
-        self.internal_sync(&term);
+        let mut term = term.lock();
+        self.internal_sync(&mut term);
     }
 
-    fn internal_sync(&mut self, terminal: &Term<EventProxy>) {
+    fn internal_sync(&mut self, terminal: &mut Term<EventProxy>) {
         let selectable_range = match &terminal.selection {
             Some(s) => s.to_range(terminal),
             None => None,
         };
 
+        let cursor = terminal.grid_mut().cursor_cell().clone();
         self.last_content = RenderableContent {
             grid: terminal.grid().clone(),
             selectable_range,
+            cursor: cursor.clone(),
             terminal_mode: *terminal.mode(),
             terminal_size: self.size,
         }
@@ -332,6 +336,7 @@ impl Backend {
 pub struct RenderableContent {
     pub grid: Grid<Cell>,
     pub selectable_range: Option<SelectionRange>,
+    pub cursor: Cell,
     pub terminal_mode: TermMode,
     pub terminal_size: TerminalSize,
 }

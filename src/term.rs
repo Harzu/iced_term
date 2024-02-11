@@ -106,7 +106,7 @@ impl Term {
 
             while let Some(event) = event_rx.recv().await {
                 let cmd = Command::ProcessBackendCommand(
-                    BackendCommand::ProcessPtyEvent(event),
+                    BackendCommand::ProcessAlacrittyEvent(event),
                 );
                 output
                     .send(Event::CommandReceived(id, cmd))
