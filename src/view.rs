@@ -145,7 +145,6 @@ impl<'a> TermView<'a> {
     ) -> Option<Command> {
         if let Some(ref backend) = self.term.backend() {
             let mut binding_action = BindingAction::Ignore;
-            println!("{:?}", backend.renderable_content().terminal_mode);
             let last_content = backend.renderable_content();
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
@@ -164,9 +163,7 @@ impl<'a> TermView<'a> {
                         let mut buf = [0, 0, 0, 0];
                         let str = c.encode_utf8(&mut buf);
                         return Some(Command::ProcessBackendCommand(
-                            BackendCommand::Write(
-                                str.as_bytes().to_vec(),
-                            ),
+                            BackendCommand::Write(str.as_bytes().to_vec()),
                         ));
                     }
                 },
@@ -321,14 +318,19 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                             },
                             Size::new(cell_width as f32, cell_height as f32),
                         );
-                        
-                        let cursor_color = self.term.theme().get_color(content.cursor.fg);
+
+                        let cursor_color =
+                            self.term.theme().get_color(content.cursor.fg);
                         frame.fill(&cursor_rect, cursor_color);
                     }
 
                     if indexed.c != ' ' && indexed.c != '\t' {
-                        if content.grid.cursor.point == indexed.point {
-                            std::mem::swap(&mut fg, &mut bg);
+                        if content.grid.cursor.point == indexed.point
+                            && content
+                                .terminal_mode
+                                .contains(TermMode::APP_CURSOR)
+                        {
+                            fg = bg;
                         }
 
                         let text = Text {
