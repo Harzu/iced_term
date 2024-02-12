@@ -19,7 +19,7 @@ pub enum Event {
 pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
     ChangeTheme(Box<ColorPalette>),
-    ChangeFont(Box<FontSettings>),
+    ChangeFont(FontSettings),
     AddBindings(Vec<(Binding<InputKind>, BindingAction)>),
     ProcessBackendCommand(BackendCommand),
 }
@@ -80,7 +80,7 @@ impl Term {
     pub fn new(id: u64, settings: TermSettings) -> Self {
         Self {
             id,
-            font: TermFont::new(Box::new(settings.font)),
+            font: TermFont::new(settings.font),
             theme: TermTheme::new(Box::new(settings.theme)),
             bindings: BindingsLayout::default(),
             cache: Cache::default(),
@@ -134,7 +134,7 @@ impl Term {
                     )
                     .unwrap_or_else(|_| {
                         panic!("init pty with ID: {} is failed", self.id);
-                    })
+                    }),
                 );
             },
             Command::ChangeTheme(palette) => {

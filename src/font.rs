@@ -26,7 +26,7 @@ pub struct TermFont {
 }
 
 impl TermFont {
-    pub fn new(settings: Box<FontSettings>) -> Self {
+    pub fn new(settings: FontSettings) -> Self {
         Self {
             size: settings.size,
             font_type: settings.font_type,

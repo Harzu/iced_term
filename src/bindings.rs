@@ -1,5 +1,8 @@
 use alacritty_terminal::term::TermMode;
-use iced_core::{keyboard::{KeyCode, Modifiers}, mouse::Button};
+use iced_core::{
+    keyboard::{KeyCode, Modifiers},
+    mouse::Button,
+};
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
 pub enum BindingAction {
@@ -7,7 +10,7 @@ pub enum BindingAction {
     Paste,
     Char(char),
     Esc(String),
-    LinkProcess,
+    LinkOpen,
     Ignore,
 }
 
@@ -343,7 +346,7 @@ fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
 fn mouse_default_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         MouseBinding;
-        Left, Modifiers::CTRL; BindingAction::LinkProcess;
+        Left, Modifiers::CTRL; BindingAction::LinkOpen;
     )
 }
 

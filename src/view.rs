@@ -1,6 +1,4 @@
-use std::ops::Index;
-
-use crate::backend::BackendCommand;
+use crate::backend::{BackendCommand, LinkAction};
 use crate::bindings::{BindingAction, InputKind};
 use crate::term::{Event, Term, ViewProxy};
 use crate::Command;
@@ -63,14 +61,25 @@ impl<'a> TermView<'a> {
         false
     }
 
+    fn is_cursor_hovered_hyperlink(&self, state: &TermViewState) -> bool {
+        if let Some(ref backend) = self.term.backend() {
+            let content = backend.renderable_content();
+            if let Some(hyperlink_range) = &content.hovered_hyperlink {
+                return hyperlink_range.contains(&state.mouse_position_on_grid);
+            }
+        }
+
+        false
+    }
+
     fn handle_mouse_event(
         &self,
         state: &mut TermViewState,
         layout_position: Point,
         cursor_position: Point,
         event: iced::mouse::Event,
-    ) -> Option<Command> {
-        let mut cmd = None;
+    ) -> Vec<Command> {
+        let mut commands = vec![];
         if let Some(ref backend) = self.term.backend() {
             let terminal_content = backend.renderable_content();
             match event {
@@ -86,7 +95,7 @@ impl<'a> TermView<'a> {
                     };
                     state.last_click = Some(current_click);
                     state.is_dragged = true;
-                    cmd = Some(Command::ProcessBackendCommand(
+                    commands.push(Command::ProcessBackendCommand(
                         BackendCommand::SelectStart(
                             selction_type,
                             (
@@ -102,41 +111,47 @@ impl<'a> TermView<'a> {
                     state.mouse_position_on_grid = backend.selection_point(
                         cursor_x,
                         cursor_y,
-                        terminal_content.grid.display_offset()
+                        terminal_content.grid.display_offset(),
                     );
 
+                    if state.keyboard_modifiers == Modifiers::COMMAND {
+                        commands.push(Command::ProcessBackendCommand(
+                            BackendCommand::FindLink(
+                                LinkAction::Hover,
+                                state.mouse_position_on_grid,
+                            ),
+                        ));
+                    }
+
                     if state.is_dragged {
-                        cmd = Some(Command::ProcessBackendCommand(
-                            BackendCommand::SelectUpdate((
-                                cursor_x,
-                                cursor_y,
-                            )),
+                        commands.push(Command::ProcessBackendCommand(
+                            BackendCommand::SelectUpdate((cursor_x, cursor_y)),
                         ));
                     }
                 },
                 iced_core::mouse::Event::ButtonReleased(
                     iced_core::mouse::Button::Left,
                 ) => {
-                    match self.term.bindings().get_action(
+                    if self.term.bindings().get_action(
                         InputKind::Mouse(iced_core::mouse::Button::Left),
                         state.keyboard_modifiers,
                         terminal_content.terminal_mode,
-                    ) {
-                        BindingAction::LinkProcess => {
-                            cmd = Some(Command::ProcessBackendCommand(
-                                BackendCommand::MatchWord(state.mouse_position_on_grid),
-                            ));
-                        }
-                        _ => {
-                            state.is_dragged = false;
-                        }
-                    }
+                    ) == BindingAction::LinkOpen
+                    {
+                        commands.push(Command::ProcessBackendCommand(
+                            BackendCommand::FindLink(
+                                LinkAction::Open,
+                                state.mouse_position_on_grid,
+                            ),
+                        ));
+                    };
+                    state.is_dragged = false;
                 },
                 iced::mouse::Event::WheelScrolled { delta } => match delta {
                     ScrollDelta::Lines { x: _, y } => {
                         state.scroll_pixels = 0.0;
                         let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-                        cmd = Some(Command::ProcessBackendCommand(
+                        commands.push(Command::ProcessBackendCommand(
                             BackendCommand::Scroll(lines as i32),
                         ));
                     },
@@ -152,7 +167,7 @@ impl<'a> TermView<'a> {
                             lines += 1;
                             state.scroll_pixels -= line_height;
                         }
-                        cmd = Some(Command::ProcessBackendCommand(
+                        commands.push(Command::ProcessBackendCommand(
                             BackendCommand::Scroll(-lines),
                         ));
                     },
@@ -161,7 +176,7 @@ impl<'a> TermView<'a> {
             }
         }
 
-        cmd
+        commands
     }
 
     fn handle_keyboard_event(
@@ -176,6 +191,21 @@ impl<'a> TermView<'a> {
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
                     state.keyboard_modifiers = m;
+                    if state.keyboard_modifiers == Modifiers::COMMAND {
+                        return Some(Command::ProcessBackendCommand(
+                            BackendCommand::FindLink(
+                                LinkAction::Hover,
+                                state.mouse_position_on_grid,
+                            ),
+                        ));
+                    } else {
+                        return Some(Command::ProcessBackendCommand(
+                            BackendCommand::FindLink(
+                                LinkAction::Clear,
+                                state.mouse_position_on_grid,
+                            ),
+                        ));
+                    }
                 },
                 iced::keyboard::Event::CharacterReceived(c) => {
                     binding_action = self.term.bindings().get_action(
@@ -322,24 +352,45 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                         }
                     }
 
-                    let size = Size::new(cell_width as f32, cell_height as f32);
+                    let cell_size =
+                        Size::new(cell_width as f32, cell_height as f32);
                     let background = Path::rectangle(
                         Point {
                             x: layout.position().x + x as f32,
                             y: layout.position().y + y as f32,
                         },
-                        size,
+                        cell_size,
                     );
                     frame.fill(&background, bg);
 
-                    if state.mouse_position_on_grid == indexed.point {
-                        // println!("Hyperlink");
-                        frame.stroke(
-                            &background, 
-                            Stroke::default()
-                                .with_color(fg)
-                                .with_width(2.0)
-                        )
+                    if let Some(range) = &content.hovered_hyperlink {
+                        if range.contains(&indexed.point)
+                            && range.contains(&state.mouse_position_on_grid)
+                        {
+                            let underline = Path::line(
+                                Point {
+                                    x: layout.position().x + x as f32,
+                                    y: layout.position().y
+                                        + y as f32
+                                        + cell_size.height,
+                                },
+                                Point {
+                                    x: layout.position().x
+                                        + x as f32
+                                        + cell_size.width,
+                                    y: layout.position().y
+                                        + y as f32
+                                        + cell_size.height,
+                                },
+                            );
+
+                            frame.stroke(
+                                &underline,
+                                Stroke::default()
+                                    .with_width(self.term.font().size() * 0.15)
+                                    .with_color(fg),
+                            )
+                        }
                     }
 
                     if content.grid.cursor.point == indexed.point {
@@ -376,10 +427,10 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                             position: Point {
                                 x: layout.position().x
                                     + x as f32
-                                    + size.width / 2.0,
+                                    + cell_size.width / 2.0,
                                 y: layout.position().y
                                     + y as f32
-                                    + size.height / 2.0,
+                                    + cell_size.height / 2.0,
                             },
                             font: self.term.font().font_type(),
                             size: self.term.font().size(),
@@ -423,12 +474,12 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
             return iced::event::Status::Ignored;
         }
 
-        let mut cmd = None;
+        let mut commands = vec![];
         match event {
             iced::Event::Mouse(mouse_event) => {
                 if self.is_cursor_in_layout(cursor, layout) {
                     let cursor_position = cursor.position().unwrap();
-                    cmd = self.handle_mouse_event(
+                    commands = self.handle_mouse_event(
                         state,
                         layout.position(),
                         cursor_position,
@@ -437,34 +488,44 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                 }
             },
             iced::Event::Keyboard(keyboard_event) => {
-                cmd =
+                if let Some(cmd) =
                     self.handle_keyboard_event(state, clipboard, keyboard_event)
+                {
+                    commands.push(cmd);
+                }
             },
             _ => {},
         };
 
-        match cmd {
-            None => iced::event::Status::Ignored,
-            Some(c) => {
-                shell.publish(Event::CommandReceived(self.term.id(), c));
-                iced::event::Status::Captured
-            },
+        if !commands.is_empty() {
+            for cmd in commands {
+                shell.publish(Event::CommandReceived(self.term.id(), cmd));
+            }
+            iced::event::Status::Captured
+        } else {
+            iced::event::Status::Ignored
         }
     }
 
     fn mouse_interaction(
         &self,
-        _state: &Tree,
+        tree: &Tree,
         layout: iced_core::Layout<'_>,
         cursor: iced_core::mouse::Cursor,
         _viewport: &Rectangle,
         _renderer: &iced::Renderer<Theme>,
     ) -> iced_core::mouse::Interaction {
+        let state = tree.state.downcast_ref::<TermViewState>();
+        let mut cursor_mode = iced_core::mouse::Interaction::Idle;
         if self.is_cursor_in_layout(cursor, layout) {
-            return iced_core::mouse::Interaction::Text;
+            cursor_mode = iced_core::mouse::Interaction::Text;
         }
 
-        iced_core::mouse::Interaction::Idle
+        if self.is_cursor_hovered_hyperlink(state) {
+            cursor_mode = iced_core::mouse::Interaction::Pointer;
+        }
+
+        cursor_mode
     }
 }
 
@@ -482,7 +543,7 @@ pub struct TermViewState {
     scroll_pixels: f32,
     keyboard_modifiers: Modifiers,
     size: Size<f32>,
-    mouse_position_on_grid: TerminalGridPoint
+    mouse_position_on_grid: TerminalGridPoint,
 }
 
 impl TermViewState {

@@ -18,6 +18,7 @@ use settings::BackendSettings;
 use std::borrow::Cow;
 use std::cmp::min;
 use std::io::Result;
+use std::ops::{Index, RangeInclusive};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -30,8 +31,15 @@ pub enum BackendCommand {
     Resize(Size<f32>),
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
-    MatchWord(Point),
+    FindLink(LinkAction, Point),
     ProcessAlacrittyEvent(Event),
+}
+
+#[derive(Debug, Clone)]
+pub enum LinkAction {
+    Clear,
+    Hover,
+    Open,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -92,7 +100,6 @@ pub struct Backend {
     notifier: Notifier,
     last_content: RenderableContent,
     pub url_regex: RegexSearch,
-    pub word_regex: RegexSearch,
 }
 
 impl Backend {
@@ -124,6 +131,7 @@ impl Backend {
             terminal_mode: *term.mode(),
             terminal_size,
             cursor: cursor.clone(),
+            hovered_hyperlink: None,
         };
 
         let term = Arc::new(FairMutex::new(term));
@@ -133,7 +141,6 @@ impl Backend {
         let _pty_join_handle = pty_event_loop.spawn();
 
         let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
-        let word_regex = RegexSearch::new(r#"[\w.\[\]:/@\-~]+"#).unwrap();
 
         Ok(Self {
             term: term.clone(),
@@ -141,7 +148,6 @@ impl Backend {
             notifier,
             last_content: initial_content,
             url_regex,
-            word_regex,
         })
     }
 
@@ -187,16 +193,59 @@ impl Backend {
                 self.update_selection(&mut term, x, y);
                 action = Action::Redraw;
             },
-            BackendCommand::MatchWord(point) => {
-                let x = self.regex_match_at(&term, point, &mut self.url_regex.clone());
-                println!("{:?}", x);
-            }
+            BackendCommand::FindLink(link_action, point) => {
+                action = self.process_link_action(&term, link_action, point);
+            },
         };
 
         action
     }
 
-    pub fn start_selection(
+    fn process_link_action(
+        &mut self,
+        terminal: &Term<EventProxy>,
+        link_action: LinkAction,
+        point: Point,
+    ) -> Action {
+        let mut action = Action::Ignore;
+        match link_action {
+            LinkAction::Hover => {
+                self.last_content.hovered_hyperlink = self.regex_match_at(
+                    terminal,
+                    point,
+                    &mut self.url_regex.clone(),
+                );
+                action = Action::Redraw;
+            },
+            LinkAction::Clear => {
+                self.last_content.hovered_hyperlink = None;
+                action = Action::Redraw;
+            },
+            LinkAction::Open => {
+                if let Some(range) = &self.last_content.hovered_hyperlink {
+                    let start = range.start();
+                    let end = range.end();
+
+                    let mut url =
+                        String::from(self.last_content.grid.index(*start).c);
+                    for indexed in self.last_content.grid.iter_from(*start) {
+                        url.push(indexed.c);
+                        if indexed.point == *end {
+                            break;
+                        }
+                    }
+
+                    open::that(url).unwrap_or_else(|_| {
+                        panic!("link opening is failed");
+                    })
+                }
+            },
+        };
+
+        action
+    }
+
+    fn start_selection(
         &mut self,
         terminal: &mut Term<EventProxy>,
         selection_type: SelectionType,
@@ -213,7 +262,7 @@ impl Backend {
         self.internal_sync(terminal);
     }
 
-    pub fn update_selection(
+    fn update_selection(
         &mut self,
         terminal: &mut Term<EventProxy>,
         x: f32,
@@ -227,7 +276,12 @@ impl Backend {
         }
     }
 
-    pub fn selection_point(&self, x: f32, y: f32, display_offset: usize) -> Point {
+    pub fn selection_point(
+        &self,
+        x: f32,
+        y: f32,
+        display_offset: usize,
+    ) -> Point {
         let col = (x as usize) / (self.size.cell_width as usize);
         let col = min(Column(col), Column(self.size.num_cols as usize - 1));
 
@@ -248,7 +302,7 @@ impl Backend {
         }
     }
 
-    pub fn resize(
+    fn resize(
         &mut self,
         terminal: &mut Term<EventProxy>,
         layout_width: f32,
@@ -274,15 +328,11 @@ impl Backend {
         }
     }
 
-    pub fn write<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
+    fn write<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
         self.notifier.notify(input);
     }
 
-    pub fn scroll(
-        &mut self,
-        terminal: &mut Term<EventProxy>,
-        delta_value: i32,
-    ) {
+    fn scroll(&mut self, terminal: &mut Term<EventProxy>, delta_value: i32) {
         if delta_value != 0 {
             let scroll = Scroll::Delta(delta_value);
             if terminal
@@ -332,13 +382,11 @@ impl Backend {
         };
 
         let cursor = terminal.grid_mut().cursor_cell().clone();
-        self.last_content = RenderableContent {
-            grid: terminal.grid().clone(),
-            selectable_range,
-            cursor: cursor.clone(),
-            terminal_mode: *terminal.mode(),
-            terminal_size: self.size,
-        }
+        self.last_content.grid = terminal.grid().clone();
+        self.last_content.selectable_range = selectable_range;
+        self.last_content.cursor = cursor.clone();
+        self.last_content.terminal_mode = *terminal.mode();
+        self.last_content.terminal_size = self.size;
     }
 
     pub fn renderable_content(&self) -> &RenderableContent {
@@ -347,21 +395,28 @@ impl Backend {
 
     /// Based on alacritty/src/display/hint.rs > regex_match_at
     /// Retrieve the match, if the specified point is inside the content matching the regex.
-    pub fn regex_match_at(&self, terminal: &Term<EventProxy>, point: Point, regex: &mut RegexSearch) -> Option<Match> {
-        let x = visible_regex_match_iter(&terminal, regex).find(|rm| rm.contains(&point));
+    fn regex_match_at(
+        &self,
+        terminal: &Term<EventProxy>,
+        point: Point,
+        regex: &mut RegexSearch,
+    ) -> Option<Match> {
+        let x = visible_regex_match_iter(terminal, regex)
+            .find(|rm| rm.contains(&point));
         x
     }
 }
 
 /// Copied from alacritty/src/display/hint.rs:
 /// Iterate over all visible regex matches.
-pub fn visible_regex_match_iter<'a>(
+fn visible_regex_match_iter<'a>(
     term: &'a Term<EventProxy>,
     regex: &'a mut RegexSearch,
 ) -> impl Iterator<Item = Match> + 'a {
     let viewport_start = Line(-(term.grid().display_offset() as i32));
     let viewport_end = viewport_start + term.bottommost_line();
-    let mut start = term.line_search_left(Point::new(viewport_start, Column(0)));
+    let mut start =
+        term.line_search_left(Point::new(viewport_start, Column(0)));
     let mut end = term.line_search_right(Point::new(viewport_end, Column(0)));
     start.line = start.line.max(viewport_start - 100);
     end.line = end.line.min(viewport_end + 100);
@@ -373,6 +428,7 @@ pub fn visible_regex_match_iter<'a>(
 
 pub struct RenderableContent {
     pub grid: Grid<Cell>,
+    pub hovered_hyperlink: Option<RangeInclusive<Point>>,
     pub selectable_range: Option<SelectionRange>,
     pub cursor: Cell,
     pub terminal_mode: TermMode,
