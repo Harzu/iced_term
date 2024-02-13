@@ -138,35 +138,37 @@ impl Term {
                 );
             },
             Command::ChangeTheme(palette) => {
-                if let Some(ref mut backend) = self.backend {
-                    self.theme = TermTheme::new(palette);
-                    backend.sync();
-                    self.cache.clear();
-                }
+                self.theme = TermTheme::new(palette);
+                self.sync_and_redraw();
             },
             Command::ChangeFont(font_settings) => {
-                if let Some(ref mut backend) = self.backend {
-                    self.font = TermFont::new(font_settings);
-                    backend.sync();
-                    self.cache.clear();
-                }
+                self.font = TermFont::new(font_settings);
+                self.sync_and_redraw();
             },
             Command::AddBindings(bindings) => {
                 self.bindings.add_bindings(bindings);
             },
             Command::ProcessBackendCommand(c) => {
                 if let Some(ref mut backend) = self.backend {
-                    match backend.process_command(c) {
-                        Action::Redraw => self.cache.clear(),
-                        Action::Shutdown => {
-                            action = Action::Shutdown;
-                        },
-                        _ => {},
+                    action = backend.process_command(c);
+                    if action == Action::Redraw {
+                        self.redraw();
                     }
                 }
             },
         }
 
         action
+    }
+
+    fn sync_and_redraw(&mut self) {
+        if let Some(ref mut backend) = self.backend {
+            backend.sync();
+            self.redraw();
+        }
+    }
+
+    fn redraw(&mut self) {
+        self.cache.clear();
     }
 }

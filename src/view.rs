@@ -83,21 +83,22 @@ impl<'a> TermView<'a> {
         let mut commands = vec![];
         if let Some(ref backend) = self.term.backend() {
             let terminal_content = backend.renderable_content();
-            let terminal_mode = backend.renderable_content().terminal_mode;
+            let terminal_mode = terminal_content.terminal_mode;
             match event {
                 iced_core::mouse::Event::ButtonPressed(
                     iced_core::mouse::Button::Left,
                 ) => {
-                    state.is_dragged = true;
-                    if terminal_mode.contains(TermMode::SGR_MOUSE) && state.keyboard_modifiers.is_empty() {
-                        commands.push(Command::ProcessBackendCommand(
+                    let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
+                        && state.keyboard_modifiers.is_empty()
+                    {
+                        Command::ProcessBackendCommand(
                             BackendCommand::MouseReport(
                                 MouseMode::Sgr,
                                 MouseButton::LeftButton,
                                 state.mouse_position_on_grid,
                                 true,
                             ),
-                        ));
+                        )
                     } else {
                         let current_click =
                             Click::new(cursor_position, state.last_click);
@@ -109,7 +110,7 @@ impl<'a> TermView<'a> {
                             mouse::click::Kind::Triple => SelectionType::Lines,
                         };
                         state.last_click = Some(current_click);
-                        commands.push(Command::ProcessBackendCommand(
+                        Command::ProcessBackendCommand(
                             BackendCommand::SelectStart(
                                 selction_type,
                                 (
@@ -117,8 +118,10 @@ impl<'a> TermView<'a> {
                                     cursor_position.y - layout_position.y,
                                 ),
                             ),
-                        ));
-                    }
+                        )
+                    };
+                    commands.push(cmd);
+                    state.is_dragged = true;
                 },
                 iced_core::mouse::Event::CursorMoved { position } => {
                     let cursor_x = position.x - layout_position.x;
@@ -131,7 +134,7 @@ impl<'a> TermView<'a> {
 
                     if state.keyboard_modifiers == Modifiers::COMMAND {
                         commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::FindLink(
+                            BackendCommand::ProcessLink(
                                 LinkAction::Hover,
                                 state.mouse_position_on_grid,
                             ),
@@ -139,22 +142,25 @@ impl<'a> TermView<'a> {
                     }
 
                     if state.is_dragged {
-                        if terminal_mode.contains(TermMode::SGR_MOUSE) && state.keyboard_modifiers.is_empty() {
-                            commands.push(Command::ProcessBackendCommand(
+                        let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
+                            && state.keyboard_modifiers.is_empty()
+                        {
+                            Command::ProcessBackendCommand(
                                 BackendCommand::MouseReport(
                                     MouseMode::Sgr,
                                     MouseButton::LeftMove,
                                     state.mouse_position_on_grid,
                                     true,
                                 ),
-                            ));
+                            )
                         } else {
-                            commands.push(Command::ProcessBackendCommand(
+                            Command::ProcessBackendCommand(
                                 BackendCommand::SelectUpdate((
                                     cursor_x, cursor_y,
                                 )),
-                            ));
-                        }
+                            )
+                        };
+                        commands.push(cmd);
                     }
                 },
                 iced_core::mouse::Event::ButtonReleased(
@@ -167,7 +173,7 @@ impl<'a> TermView<'a> {
                     ) == BindingAction::LinkOpen
                     {
                         commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::FindLink(
+                            BackendCommand::ProcessLink(
                                 LinkAction::Open,
                                 state.mouse_position_on_grid,
                             ),
@@ -232,14 +238,14 @@ impl<'a> TermView<'a> {
                     state.keyboard_modifiers = m;
                     if state.keyboard_modifiers == Modifiers::COMMAND {
                         return Some(Command::ProcessBackendCommand(
-                            BackendCommand::FindLink(
+                            BackendCommand::ProcessLink(
                                 LinkAction::Hover,
                                 state.mouse_position_on_grid,
                             ),
                         ));
                     } else {
                         return Some(Command::ProcessBackendCommand(
-                            BackendCommand::FindLink(
+                            BackendCommand::ProcessLink(
                                 LinkAction::Clear,
                                 state.mouse_position_on_grid,
                             ),

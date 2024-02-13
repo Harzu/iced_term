@@ -791,6 +791,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fonts"
+version = "0.10.1"
+dependencies = [
+ "iced",
+ "iced_term",
+]
+
+[[package]]
 name = "foreign-types"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

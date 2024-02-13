@@ -31,7 +31,7 @@ pub enum BackendCommand {
     Resize(Size<f32>),
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
-    FindLink(LinkAction, Point),
+    ProcessLink(LinkAction, Point),
     MouseReport(MouseMode, MouseButton, Point, bool),
     ProcessAlacrittyEvent(Event),
 }
@@ -195,6 +195,7 @@ impl Backend {
             },
             BackendCommand::Scroll(delta) => {
                 self.scroll(&mut term, delta);
+                self.internal_sync(&mut term);
                 action = Action::Redraw;
             },
             BackendCommand::Resize(size) => {
@@ -205,17 +206,20 @@ impl Backend {
                     self.size.cell_width,
                     self.size.cell_height,
                 );
+                self.internal_sync(&mut term);
                 action = Action::Redraw;
             },
             BackendCommand::SelectStart(selection_type, (x, y)) => {
                 self.start_selection(&mut term, selection_type, x, y);
+                self.internal_sync(&mut term);
                 action = Action::Redraw;
             },
             BackendCommand::SelectUpdate((x, y)) => {
                 self.update_selection(&mut term, x, y);
+                self.internal_sync(&mut term);
                 action = Action::Redraw;
             },
-            BackendCommand::FindLink(link_action, point) => {
+            BackendCommand::ProcessLink(link_action, point) => {
                 action = self.process_link_action(&term, link_action, point);
             },
             BackendCommand::MouseReport(mode, button, point, pressed) => {
@@ -253,27 +257,30 @@ impl Backend {
                 action = Action::Redraw;
             },
             LinkAction::Open => {
-                if let Some(range) = &self.last_content.hovered_hyperlink {
-                    let start = range.start();
-                    let end = range.end();
-
-                    let mut url =
-                        String::from(self.last_content.grid.index(*start).c);
-                    for indexed in self.last_content.grid.iter_from(*start) {
-                        url.push(indexed.c);
-                        if indexed.point == *end {
-                            break;
-                        }
-                    }
-
-                    open::that(url).unwrap_or_else(|_| {
-                        panic!("link opening is failed");
-                    })
-                }
+                self.open_link();
             },
         };
 
         action
+    }
+
+    fn open_link(&self) {
+        if let Some(range) = &self.last_content.hovered_hyperlink {
+            let start = range.start();
+            let end = range.end();
+
+            let mut url = String::from(self.last_content.grid.index(*start).c);
+            for indexed in self.last_content.grid.iter_from(*start) {
+                url.push(indexed.c);
+                if indexed.point == *end {
+                    break;
+                }
+            }
+
+            open::that(url).unwrap_or_else(|_| {
+                panic!("link opening is failed");
+            })
+        }
     }
 
     fn sgr_mouse_report(
@@ -309,7 +316,6 @@ impl Backend {
             location,
             self.selection_side(x),
         ));
-        self.internal_sync(terminal);
     }
 
     fn update_selection(
@@ -322,7 +328,6 @@ impl Backend {
         if let Some(ref mut selection) = terminal.selection {
             let location = self.selection_point(x, y, display_offset);
             selection.update(location, self.selection_side(x));
-            self.internal_sync(terminal);
         }
     }
 
@@ -375,7 +380,6 @@ impl Backend {
                 self.size.num_cols as usize,
                 self.size.num_lines as usize,
             ));
-            self.internal_sync(terminal);
         }
     }
 
@@ -403,7 +407,6 @@ impl Backend {
             } else {
                 terminal.grid_mut().scroll_display(scroll);
             }
-            self.internal_sync(terminal);
         }
     }
 

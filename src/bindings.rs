@@ -346,15 +346,20 @@ fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
 fn mouse_default_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         MouseBinding;
-        Left, Modifiers::CTRL; BindingAction::LinkOpen;
+        Left, Modifiers::COMMAND; BindingAction::LinkOpen;
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::bindings::MouseBinding;
+
     use super::{BindingAction, BindingsLayout, InputKind, KeyboardBinding};
     use alacritty_terminal::term::TermMode;
-    use iced_core::keyboard::{KeyCode, Modifiers};
+    use iced_core::{
+        keyboard::{KeyCode, Modifiers},
+        mouse::Button,
+    };
 
     #[test]
     fn add_new_custom_keyboard_binding() {
@@ -435,6 +440,26 @@ mod tests {
                     bind == &custom_bind && action == &custom_action
                 });
             assert!(found_binding.is_none());
+        }
+    }
+
+    #[test]
+    fn add_mouse_binding() {
+        let mut current_layout = BindingsLayout::default();
+        let custom_bindings = generate_bindings!(
+            MouseBinding;
+            Left,  Modifiers::SHIFT, +TermMode::ALT_SCREEN; BindingAction::Paste;
+            Right, Modifiers::SHIFT | Modifiers::CTRL;      BindingAction::Char('A');
+        );
+        let current_layout_length = current_layout.layout.len();
+        current_layout.add_bindings(custom_bindings.clone());
+        assert_eq!(current_layout.layout.len(), current_layout_length + 2);
+        for (custom_bind, custom_action) in custom_bindings {
+            let found_binding =
+                current_layout.layout.iter().find(|(bind, action)| {
+                    bind == &custom_bind && action == &custom_action
+                });
+            assert!(found_binding.is_some());
         }
     }
 
