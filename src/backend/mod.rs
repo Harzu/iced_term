@@ -32,7 +32,29 @@ pub enum BackendCommand {
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
     FindLink(LinkAction, Point),
+    MouseReport(MouseMode, MouseButton, Point, bool),
     ProcessAlacrittyEvent(Event),
+}
+
+#[derive(Debug, Clone)]
+pub enum MouseMode {
+    Sgr,
+    // TODO: need to implementation
+    Normal,
+}
+
+#[derive(Debug, Clone)]
+pub enum MouseButton {
+    LeftButton = 0,
+    MiddleButton = 1,
+    RightButton = 2,
+    LeftMove = 32,
+    MiddleMove = 33,
+    RightMove = 34,
+    NoneMove = 35,
+    ScrollUp = 64,
+    ScrollDown = 65,
+    Other = 99,
 }
 
 #[derive(Debug, Clone)]
@@ -139,7 +161,6 @@ impl Backend {
             EventLoop::new(term.clone(), event_proxy, pty, false, false);
         let notifier = Notifier(pty_event_loop.channel());
         let _pty_join_handle = pty_event_loop.spawn();
-
         let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
 
         Ok(Self {
@@ -184,6 +205,7 @@ impl Backend {
                     self.size.cell_width,
                     self.size.cell_height,
                 );
+                action = Action::Redraw;
             },
             BackendCommand::SelectStart(selection_type, (x, y)) => {
                 self.start_selection(&mut term, selection_type, x, y);
@@ -195,6 +217,15 @@ impl Backend {
             },
             BackendCommand::FindLink(link_action, point) => {
                 action = self.process_link_action(&term, link_action, point);
+            },
+            BackendCommand::MouseReport(mode, button, point, pressed) => {
+                match mode {
+                    MouseMode::Sgr => {
+                        self.sgr_mouse_report(point, button, pressed)
+                    },
+                    MouseMode::Normal => {},
+                }
+                action = Action::Redraw;
             },
         };
 
@@ -243,6 +274,25 @@ impl Backend {
         };
 
         action
+    }
+
+    fn sgr_mouse_report(
+        &self,
+        point: Point,
+        button: MouseButton,
+        pressed: bool,
+    ) {
+        let c = if pressed { 'M' } else { 'm' };
+
+        let msg = format!(
+            "\x1b[<{};{};{}{}",
+            button as u8,
+            point.column + 1,
+            point.line + 1,
+            c
+        );
+
+        self.notifier.notify(msg.as_bytes().to_vec());
     }
 
     fn start_selection(
@@ -325,6 +375,7 @@ impl Backend {
                 self.size.num_cols as usize,
                 self.size.num_lines as usize,
             ));
+            self.internal_sync(terminal);
         }
     }
 

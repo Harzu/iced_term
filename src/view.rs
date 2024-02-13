@@ -1,4 +1,4 @@
-use crate::backend::{BackendCommand, LinkAction};
+use crate::backend::{BackendCommand, LinkAction, MouseButton, MouseMode};
 use crate::bindings::{BindingAction, InputKind};
 use crate::term::{Event, Term, ViewProxy};
 use crate::Command;
@@ -12,6 +12,7 @@ use iced::widget::container;
 use iced::{Element, Length, Point, Rectangle, Size, Theme};
 use iced_core::keyboard::Modifiers;
 use iced_core::mouse::{self, Click};
+use iced_core::text::Shaping;
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
@@ -82,28 +83,42 @@ impl<'a> TermView<'a> {
         let mut commands = vec![];
         if let Some(ref backend) = self.term.backend() {
             let terminal_content = backend.renderable_content();
+            let terminal_mode = backend.renderable_content().terminal_mode;
             match event {
                 iced_core::mouse::Event::ButtonPressed(
                     iced_core::mouse::Button::Left,
                 ) => {
-                    let current_click =
-                        Click::new(cursor_position, state.last_click);
-                    let selction_type = match current_click.kind() {
-                        mouse::click::Kind::Single => SelectionType::Simple,
-                        mouse::click::Kind::Double => SelectionType::Semantic,
-                        mouse::click::Kind::Triple => SelectionType::Lines,
-                    };
-                    state.last_click = Some(current_click);
                     state.is_dragged = true;
-                    commands.push(Command::ProcessBackendCommand(
-                        BackendCommand::SelectStart(
-                            selction_type,
-                            (
-                                cursor_position.x - layout_position.x,
-                                cursor_position.y - layout_position.y,
+                    if terminal_mode.contains(TermMode::SGR_MOUSE) && state.keyboard_modifiers.is_empty() {
+                        commands.push(Command::ProcessBackendCommand(
+                            BackendCommand::MouseReport(
+                                MouseMode::Sgr,
+                                MouseButton::LeftButton,
+                                state.mouse_position_on_grid,
+                                true,
                             ),
-                        ),
-                    ));
+                        ));
+                    } else {
+                        let current_click =
+                            Click::new(cursor_position, state.last_click);
+                        let selction_type = match current_click.kind() {
+                            mouse::click::Kind::Single => SelectionType::Simple,
+                            mouse::click::Kind::Double => {
+                                SelectionType::Semantic
+                            },
+                            mouse::click::Kind::Triple => SelectionType::Lines,
+                        };
+                        state.last_click = Some(current_click);
+                        commands.push(Command::ProcessBackendCommand(
+                            BackendCommand::SelectStart(
+                                selction_type,
+                                (
+                                    cursor_position.x - layout_position.x,
+                                    cursor_position.y - layout_position.y,
+                                ),
+                            ),
+                        ));
+                    }
                 },
                 iced_core::mouse::Event::CursorMoved { position } => {
                     let cursor_x = position.x - layout_position.x;
@@ -124,9 +139,22 @@ impl<'a> TermView<'a> {
                     }
 
                     if state.is_dragged {
-                        commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::SelectUpdate((cursor_x, cursor_y)),
-                        ));
+                        if terminal_mode.contains(TermMode::SGR_MOUSE) && state.keyboard_modifiers.is_empty() {
+                            commands.push(Command::ProcessBackendCommand(
+                                BackendCommand::MouseReport(
+                                    MouseMode::Sgr,
+                                    MouseButton::LeftMove,
+                                    state.mouse_position_on_grid,
+                                    true,
+                                ),
+                            ));
+                        } else {
+                            commands.push(Command::ProcessBackendCommand(
+                                BackendCommand::SelectUpdate((
+                                    cursor_x, cursor_y,
+                                )),
+                            ));
+                        }
                     }
                 },
                 iced_core::mouse::Event::ButtonReleased(
@@ -145,7 +173,18 @@ impl<'a> TermView<'a> {
                             ),
                         ));
                     };
+
                     state.is_dragged = false;
+                    if terminal_mode.contains(TermMode::SGR_MOUSE) {
+                        commands.push(Command::ProcessBackendCommand(
+                            BackendCommand::MouseReport(
+                                MouseMode::Sgr,
+                                MouseButton::LeftButton,
+                                state.mouse_position_on_grid,
+                                false,
+                            ),
+                        ));
+                    }
                 },
                 iced::mouse::Event::WheelScrolled { delta } => match delta {
                     ScrollDelta::Lines { x: _, y } => {
@@ -437,6 +476,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                             color: fg,
                             horizontal_alignment: Horizontal::Center,
                             vertical_alignment: Vertical::Center,
+                            shaping: Shaping::Advanced,
                             ..Text::default()
                         };
 
@@ -517,7 +557,13 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
     ) -> iced_core::mouse::Interaction {
         let state = tree.state.downcast_ref::<TermViewState>();
         let mut cursor_mode = iced_core::mouse::Interaction::Idle;
-        if self.is_cursor_in_layout(cursor, layout) {
+        let mut terminal_mode = TermMode::empty();
+        if let Some(ref backend) = self.term.backend() {
+            terminal_mode = backend.renderable_content().terminal_mode;
+        }
+        if self.is_cursor_in_layout(cursor, layout)
+            && !terminal_mode.contains(TermMode::SGR_MOUSE)
+        {
             cursor_mode = iced_core::mouse::Interaction::Text;
         }
 

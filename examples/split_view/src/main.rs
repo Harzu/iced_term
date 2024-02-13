@@ -11,8 +11,9 @@ use iced::{
 use iced_term::{term_view, TermView};
 use std::collections::HashMap;
 
-const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
-    include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 pub fn main() -> iced::Result {
     Example::run(Settings {

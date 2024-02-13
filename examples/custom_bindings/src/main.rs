@@ -12,8 +12,9 @@ use iced_term::{
     generate_bindings, TermMode,
 };
 
-const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
-    include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 fn main() -> iced::Result {
     App::run(Settings {

@@ -1,5 +1,5 @@
 use iced::advanced::graphics::core::Element;
-use iced::font::{Family, Stretch, Weight};
+use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{
     executor, window, Application, Command, Font, Length, Settings,
@@ -7,8 +7,9 @@ use iced::{
 };
 use iced_term;
 
-const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
-    include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 fn main() -> iced::Result {
     App::run(Settings {
@@ -48,8 +49,7 @@ impl Application for App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrains Mono"),
-                    monospaced: false,
-                    stretch: Stretch::Normal,
+                    ..Font::default()
                 },
             },
             theme: iced_term::ColorPalette::default(),
