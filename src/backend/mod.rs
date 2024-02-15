@@ -162,7 +162,7 @@ impl Backend {
 
         let term = Arc::new(FairMutex::new(term));
         let pty_event_loop =
-            EventLoop::new(term.clone(), event_proxy, pty, false, false);
+            EventLoop::new(term.clone(), event_proxy, pty, false, false)?;
         let notifier = Notifier(pty_event_loop.channel());
         let _pty_join_handle = pty_event_loop.spawn();
         let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();

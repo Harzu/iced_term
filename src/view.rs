@@ -13,6 +13,7 @@ use iced::{Element, Length, Point, Rectangle, Size, Theme};
 use iced_core::keyboard::Modifiers;
 use iced_core::mouse::{self, Click};
 use iced_core::text::Shaping;
+use iced_core::clipboard::{ Kind as ClipboardKind };
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
@@ -252,75 +253,81 @@ impl<'a> TermView<'a> {
                         ));
                     }
                 },
-                iced::keyboard::Event::CharacterReceived(c) => {
-                    binding_action = self.term.bindings().get_action(
-                        InputKind::Char(c.to_ascii_lowercase()),
-                        state.keyboard_modifiers,
-                        last_content.terminal_mode,
-                    );
-
-                    if binding_action == BindingAction::Ignore
-                        && !c.is_control()
-                    {
-                        let mut buf = [0, 0, 0, 0];
-                        let str = c.encode_utf8(&mut buf);
-                        return Some(Command::ProcessBackendCommand(
-                            BackendCommand::Write(str.as_bytes().to_vec()),
-                        ));
-                    }
-                },
                 iced::keyboard::Event::KeyPressed {
-                    key_code,
+                    key,
+                    location: _, 
                     modifiers,
+                    text,
                 } => {
-                    binding_action = self.term.bindings().get_action(
-                        InputKind::KeyCode(key_code),
-                        modifiers,
-                        last_content.terminal_mode,
-                    );
+                    if let Some(key_content) = text {
+                        println!("{:?}", key_content);
+                        // binding_action = self.term.bindings().get_action(
+                        //     InputKind::Char(key_content.to_ascii_lowercase()),
+                        //     state.keyboard_modifiers,
+                        //     last_content.terminal_mode,
+                        // );
+    
+                        // if binding_action == BindingAction::Ignore
+                        //     && !c.is_control()
+                        // {
+                        //     let mut buf = [0, 0, 0, 0];
+                        //     let str = c.encode_utf8(&mut buf);
+                        //     return Some(Command::ProcessBackendCommand(
+                        //         BackendCommand::Write(str.as_bytes().to_vec()),
+                        //     ));
+                        // }
+                    }
+
+                    // binding_action = self.term.bindings().get_action(
+                    //     InputKind::KeyCode(key),
+                    //     modifiers,
+                    //     last_content.terminal_mode,
+                    // );
                 },
                 _ => {},
             }
 
-            match binding_action {
-                BindingAction::Char(c) => {
-                    let mut buf = [0, 0, 0, 0];
-                    let str = c.encode_utf8(&mut buf);
-                    return Some(Command::ProcessBackendCommand(
-                        BackendCommand::Write(str.as_bytes().to_vec()),
-                    ));
-                },
-                BindingAction::Esc(seq) => {
-                    return Some(Command::ProcessBackendCommand(
-                        BackendCommand::Write(seq.as_bytes().to_vec()),
-                    ));
-                },
-                BindingAction::Paste => {
-                    if let Some(data) = clipboard.read() {
-                        let input: Vec<u8> = data.bytes().collect();
-                        return Some(Command::ProcessBackendCommand(
-                            BackendCommand::Write(input),
-                        ));
-                    }
-                },
-                BindingAction::Copy => {
-                    clipboard.write(backend.selectable_content());
-                },
-                _ => {},
-            };
+            // match binding_action {
+            //     BindingAction::Char(c) => {
+            //         let mut buf = [0, 0, 0, 0];
+            //         let str = c.encode_utf8(&mut buf);
+            //         return Some(Command::ProcessBackendCommand(
+            //             BackendCommand::Write(str.as_bytes().to_vec()),
+            //         ));
+            //     },
+            //     BindingAction::Esc(seq) => {
+            //         return Some(Command::ProcessBackendCommand(
+            //             BackendCommand::Write(seq.as_bytes().to_vec()),
+            //         ));
+            //     },
+            //     BindingAction::Paste => {
+            //         if let Some(data) = clipboard.read(ClipboardKind::Standard) {
+            //             let input: Vec<u8> = data.bytes().collect();
+            //             return Some(Command::ProcessBackendCommand(
+            //                 BackendCommand::Write(input),
+            //             ));
+            //         }
+            //     },
+            //     BindingAction::Copy => {
+            //         clipboard.write(
+            //             ClipboardKind::Standard, 
+            //             backend.selectable_content(),
+            //         );
+            //     },
+            //     _ => {},
+            // };
         }
 
         None
     }
 }
 
-impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
-    fn width(&self) -> Length {
-        Length::Fill
-    }
-
-    fn height(&self) -> Length {
-        Length::Fill
+impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
+    fn size(&self) -> Size<Length> {
+        Size {
+            width: Length::Fill,
+            height: Length::Fill,
+        }
     }
 
     fn tag(&self) -> tree::Tag {
@@ -333,13 +340,16 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
 
     fn layout(
         &self,
+        _tree: &mut Tree,
         _renderer: &iced::Renderer,
-        limits: &iced::advanced::layout::Limits,
-    ) -> iced::advanced::layout::Node {
+        limits: &iced_core::layout::Limits,
+    ) -> iced_core::layout::Node {
         let size = limits
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .resolve(Size::ZERO);
+            .resolve(
+                Length::Fill,
+                Length::Fill,
+                Size::ZERO
+            );
 
         iced::advanced::layout::Node::new(size)
     }
@@ -348,7 +358,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         &self,
         tree: &mut Tree,
         _layout: iced_core::Layout<'_>,
-        _renderer: &iced::Renderer<Theme>,
+        _renderer: &iced::Renderer,
         operation: &mut dyn operation::Operation<Event>,
     ) {
         let state = tree.state.downcast_mut::<TermViewState>();
@@ -359,7 +369,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
     fn draw(
         &self,
         tree: &Tree,
-        renderer: &mut iced::Renderer<Theme>,
+        renderer: &mut iced::Renderer,
         _theme: &Theme,
         _style: &iced::advanced::renderer::Style,
         layout: iced::advanced::Layout,
@@ -478,7 +488,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
                                     + cell_size.height / 2.0,
                             },
                             font: self.term.font().font_type(),
-                            size: self.term.font().size(),
+                            size: iced_core::Pixels(self.term.font().size()),
                             color: fg,
                             horizontal_alignment: Horizontal::Center,
                             vertical_alignment: Vertical::Center,
@@ -501,7 +511,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         event: iced::Event,
         layout: iced_graphics::core::Layout<'_>,
         cursor: Cursor,
-        _renderer: &iced::Renderer<Theme>,
+        _renderer: &iced::Renderer,
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         shell: &mut iced_graphics::core::Shell<'_, Event>,
         _viewport: &Rectangle,
@@ -560,7 +570,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         layout: iced_core::Layout<'_>,
         cursor: iced_core::mouse::Cursor,
         _viewport: &Rectangle,
-        _renderer: &iced::Renderer<Theme>,
+        _renderer: &iced::Renderer,
     ) -> iced_core::mouse::Interaction {
         let state = tree.state.downcast_ref::<TermViewState>();
         let mut cursor_mode = iced_core::mouse::Interaction::Idle;
@@ -582,7 +592,7 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
     }
 }
 
-impl<'a> From<TermView<'a>> for Element<'a, Event, iced::Renderer<Theme>> {
+impl<'a> From<TermView<'a>> for Element<'a, Event, Theme, iced::Renderer> {
     fn from(widget: TermView<'a>) -> Self {
         Self::new(widget)
     }

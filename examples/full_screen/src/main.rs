@@ -2,8 +2,7 @@ use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{
-    executor, window, Application, Command, Font, Length, Settings,
-    Subscription, Theme,
+    executor, window, Application, Command, Font, Length, Settings, Size, Subscription, Theme
 };
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
@@ -14,7 +13,10 @@ fn main() -> iced::Result {
     App::run(Settings {
         antialiasing: true,
         window: window::Settings {
-            size: (1280, 720),
+            size: Size {
+                width: 1280.0,
+                height: 720.0
+            },
             ..window::Settings::default()
         },
         ..Settings::default()
@@ -53,7 +55,8 @@ impl Application for App {
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
-                shell: system_shell.to_string(),
+                // shell: system_shell.to_string(),
+                shell: "htop".to_string()
             },
         };
 
@@ -77,7 +80,7 @@ impl Application for App {
                 _,
                 cmd,
             )) => match self.term.update(cmd) {
-                iced_term::actions::Action::Shutdown => window::close(),
+                // iced_term::actions::Action::Shutdown => window::close(window::Id),
                 _ => Command::none(),
             },
         }
@@ -87,7 +90,7 @@ impl Application for App {
         self.term.subscription().map(Message::IcedTermEvent)
     }
 
-    fn view(&self) -> Element<Message, iced::Renderer> {
+    fn view(&self) -> Element<Message, Theme, iced::Renderer> {
         container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
             .width(Length::Fill)
             .height(Length::Fill)
