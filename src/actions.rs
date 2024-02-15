@@ -2,6 +2,6 @@
 pub enum Action {
     Redraw,
     Shutdown,
-    ChangeTitle,
+    ChangeTitle(String),
     Ignore,
 }

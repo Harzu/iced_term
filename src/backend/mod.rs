@@ -190,6 +190,9 @@ impl Backend {
                     Event::Exit => {
                         action = Action::Shutdown;
                     },
+                    Event::Title(title) => {
+                        action = Action::ChangeTitle(title);
+                    },
                     _ => {},
                 };
             },
