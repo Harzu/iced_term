@@ -1,5 +1,5 @@
 # Themes example
 
-Example of theme changing mechanism.
+Example of font changing mechanism.
 
 ![screenshot](./assets/screenshot.png)

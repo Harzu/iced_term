@@ -87,28 +87,22 @@ impl Application for App {
             Message::FontLoaded(_) => Command::none(),
             Message::FontChanged(name) => {
                 let font_setting = if name.as_str() == "3270" {
-                    iced_term::FontSettings {
-                        size: 14.0,
-                        font_type: Font {
-                            weight: Weight::Normal,
-                            family: Family::Name("IBM 3270"),
-                            ..Font::default()
-                        },
-                    }
+                    self.font_setting.font_type = Font {
+                        weight: Weight::Normal,
+                        family: Family::Name("IBM 3270"),
+                        ..Font::default()
+                    };
                 } else {
-                    iced_term::FontSettings {
-                        size: 14.0,
-                        font_type: Font {
-                            weight: Weight::Bold,
-                            family: Family::Name("JetBrains Mono"),
-                            ..Font::default()
-                        },
-                    }
+                    self.font_setting.font_type = Font {
+                        weight: Weight::Bold,
+                        family: Family::Name("JetBrains Mono"),
+                        ..Font::default()
+                    };
                 };
 
-                self.font_setting = font_setting.clone();
-                self.term
-                    .update(iced_term::Command::ChangeFont(font_setting));
+                self.term.update(iced_term::Command::ChangeFont(
+                    self.font_setting.clone(),
+                ));
                 Command::none()
             },
             Message::FontSizeInc => {

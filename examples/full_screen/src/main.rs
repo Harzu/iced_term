@@ -5,7 +5,6 @@ use iced::{
     executor, window, Application, Command, Font, Length, Settings,
     Subscription, Theme,
 };
-use iced_term;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
     "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"

@@ -216,3 +216,4 @@ You can also look at [examples](./examples) directory for more information about
  - [iced (0.10.0)](https://github.com/iced-rs/iced/tree/master)
  - [alacritty_terminal (0.21.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
  - [tokio (1.23.0)](https://github.com/tokio-rs/tokio)
+ - [open (5)](https://github.com/Byron/open-rs)
