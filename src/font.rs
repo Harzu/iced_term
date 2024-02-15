@@ -3,7 +3,7 @@ use iced::{Font, Size, Theme};
 use iced_graphics::renderer::Renderer;
 use iced_tiny_skia::{Backend, Settings};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FontSettings {
     pub size: f32,
     pub font_type: Font,

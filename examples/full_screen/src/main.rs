@@ -1,14 +1,14 @@
 use iced::advanced::graphics::core::Element;
-use iced::font::{Family, Stretch, Weight};
+use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{
     executor, window, Application, Command, Font, Length, Settings,
     Subscription, Theme,
 };
-use iced_term;
 
-const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
-    include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 fn main() -> iced::Result {
     App::run(Settings {
@@ -48,15 +48,12 @@ impl Application for App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrains Mono"),
-                    monospaced: false,
-                    stretch: Stretch::Normal,
+                    ..Font::default()
                 },
-                ..iced_term::FontSettings::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: system_shell.to_string(),
-                ..iced_term::BackendSettings::default()
             },
         };
 
@@ -76,32 +73,12 @@ impl Application for App {
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
             Message::FontLoaded(_) => Command::none(),
-            Message::IcedTermEvent(event) => {
-                match event {
-                    iced_term::Event::InputReceived(_, input) => {
-                        self.term
-                            .update(iced_term::Command::WriteToBackend(input));
-                    },
-                    iced_term::Event::Scrolled(_, delta) => self
-                        .term
-                        .update(iced_term::Command::Scroll(delta as i32)),
-                    iced_term::Event::Resized(_, size) => {
-                        self.term.update(iced_term::Command::Resize(size));
-                    },
-                    iced_term::Event::BackendEventSenderReceived(_, tx) => {
-                        self.term.update(iced_term::Command::InitBackend(tx));
-                    },
-                    iced_term::Event::BackendEventReceived(_, inner_event) => {
-                        self.term.update(
-                            iced_term::Command::ProcessBackendEvent(
-                                inner_event,
-                            ),
-                        );
-                    },
-                    iced_term::Event::Ignored(_) => {},
-                };
-
-                Command::none()
+            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+                _,
+                cmd,
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => window::close(),
+                _ => Command::none(),
             },
         }
     }

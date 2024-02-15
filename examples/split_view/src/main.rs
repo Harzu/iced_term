@@ -11,8 +11,9 @@ use iced::{
 use iced_term::{term_view, TermView};
 use std::collections::HashMap;
 
-const TERM_FONT_JET_BRAINS_BYTES: &[u8] =
-    include_bytes!("../assets/fonts/JetBrains/JetBrainsMono-Bold.ttf");
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 pub fn main() -> iced::Result {
     Example::run(Settings {
@@ -62,12 +63,10 @@ impl Application for Example {
                     monospaced: false,
                     stretch: Stretch::Normal,
                 },
-                ..iced_term::FontSettings::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: env!("SHELL").to_string(),
-                ..iced_term::BackendSettings::default()
             },
         };
         let tab =
@@ -141,39 +140,13 @@ impl Application for Example {
                     return TermView::focus(new_focused_tab.widget_id());
                 }
             },
-            Message::IcedTermEvent(event) => {
-                match event {
-                    iced_term::Event::InputReceived(id, data) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::WriteToBackend(data))
-                        }
-                    },
-                    iced_term::Event::Scrolled(id, delta) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::Scroll(delta as i32))
-                        }
-                    },
-                    iced_term::Event::Resized(id, size) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::Resize(size));
-                        }
-                    },
-                    iced_term::Event::BackendEventSenderReceived(id, tx) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(iced_term::Command::InitBackend(tx));
-                        }
-                    },
-                    iced_term::Event::BackendEventReceived(id, inner_event) => {
-                        if let Some(tab) = self.tabs.get_mut(&id) {
-                            tab.update(
-                                iced_term::Command::ProcessBackendEvent(
-                                    inner_event,
-                                ),
-                            );
-                        }
-                    },
-                    _ => {},
-                };
+            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+                id,
+                cmd,
+            )) => {
+                if let Some(tab) = self.tabs.get_mut(&id) {
+                    tab.update(cmd);
+                }
             },
         }
 
