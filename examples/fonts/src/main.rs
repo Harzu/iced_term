@@ -86,7 +86,7 @@ impl Application for App {
         match message {
             Message::FontLoaded(_) => Command::none(),
             Message::FontChanged(name) => {
-                let font_setting = if name.as_str() == "3270" {
+                if name.as_str() == "3270" {
                     self.font_setting.font_type = Font {
                         weight: Weight::Normal,
                         family: Family::Name("IBM 3270"),
