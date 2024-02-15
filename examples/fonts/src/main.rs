@@ -1,13 +1,10 @@
 use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
-use iced::widget::{
-    button, column, container, row, slider, text, vertical_slider,
-};
+use iced::widget::{button, column, container, row};
 use iced::{
     executor, window, Application, Command, Font, Length, Settings,
     Subscription, Theme,
 };
-use iced_term;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
     "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
@@ -36,16 +33,9 @@ pub enum Message {
     FontSizeDec,
 }
 
-#[derive(Default, Clone)]
-pub struct Slider {
-    value: u8,
-    step: u8,
-}
-
 struct App {
     term: iced_term::Term,
     font_setting: iced_term::FontSettings,
-    slider: Slider,
 }
 
 impl Application for App {
@@ -79,7 +69,6 @@ impl Application for App {
             Self {
                 term: iced_term::Term::new(term_id, term_settings.clone()),
                 font_setting: term_settings.font,
-                slider: Slider::default(),
             },
             Command::batch(vec![
                 iced::font::load(TERM_FONT_JET_BRAINS_BYTES)

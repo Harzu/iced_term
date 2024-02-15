@@ -28,7 +28,7 @@ use crate::actions::Action;
 pub enum BackendCommand {
     Write(Vec<u8>),
     Scroll(i32),
-    Resize(Size<f32>),
+    Resize(Option<Size<f32>>, Option<Size<f32>>),
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
     ProcessLink(LinkAction, Point),
@@ -70,15 +70,19 @@ pub struct TerminalSize {
     pub cell_height: u16,
     num_cols: u16,
     num_lines: u16,
+    layout_width: f32,
+    layout_height: f32,
 }
 
 impl Default for TerminalSize {
     fn default() -> Self {
         Self {
-            cell_height: 0,
-            cell_width: 0,
+            cell_width: 1,
+            cell_height: 1,
             num_cols: 80,
             num_lines: 50,
+            layout_width: 80.0,
+            layout_height: 50.0,
         }
     }
 }
@@ -198,14 +202,8 @@ impl Backend {
                 self.internal_sync(&mut term);
                 action = Action::Redraw;
             },
-            BackendCommand::Resize(size) => {
-                self.resize(
-                    &mut term,
-                    size.width,
-                    size.height,
-                    self.size.cell_width,
-                    self.size.cell_height,
-                );
+            BackendCommand::Resize(layout_size, font_measure) => {
+                self.resize(&mut term, layout_size, font_measure);
                 self.internal_sync(&mut term);
                 action = Action::Redraw;
             },
@@ -360,21 +358,26 @@ impl Backend {
     fn resize(
         &mut self,
         terminal: &mut Term<EventProxy>,
-        layout_width: f32,
-        layout_height: f32,
-        cell_width: u16,
-        cell_height: u16,
+        layout_size: Option<Size<f32>>,
+        font_measure: Option<Size<f32>>,
     ) {
-        let rows = (layout_height / cell_height as f32).floor() as u16;
-        let cols = (layout_width / cell_width as f32).floor() as u16;
-        if rows > 0 && cols > 0 {
-            self.size = TerminalSize {
-                cell_width,
-                cell_height,
-                num_cols: cols,
-                num_lines: rows,
-            };
+        if let Some(size) = layout_size {
+            self.size.layout_height = size.height;
+            self.size.layout_width = size.width;
+        };
 
+        if let Some(size) = font_measure {
+            self.size.cell_height = size.height as u16;
+            self.size.cell_width = size.width as u16;
+        }
+
+        let lines = (self.size.layout_height / self.size.cell_height as f32)
+            .floor() as u16;
+        let cols = (self.size.layout_width / self.size.cell_width as f32)
+            .floor() as u16;
+        if lines > 0 && cols > 0 {
+            self.size.num_lines = lines;
+            self.size.num_cols = cols;
             self.notifier.on_resize(self.size.into());
             terminal.resize(TermSize::new(
                 self.size.num_cols as usize,

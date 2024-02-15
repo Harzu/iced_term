@@ -631,7 +631,7 @@ checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
 
 [[package]]
 name = "custom_bindings"
-version = "0.10.1"
+version = "0.3.0"
 dependencies = [
  "iced",
  "iced_term",
@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "fonts"
-version = "0.10.1"
+version = "0.3.0"
 dependencies = [
  "iced",
  "iced_term",
@@ -815,7 +815,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "full_screen"
-version = "0.10.1"
+version = "0.3.0"
 dependencies = [
  "iced",
  "iced_term",
@@ -1223,7 +1223,7 @@ dependencies = [
 
 [[package]]
 name = "iced_term"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -2590,7 +2590,7 @@ dependencies = [
 
 [[package]]
 name = "split_view"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "iced",
  "iced_term",
@@ -2672,7 +2672,7 @@ dependencies = [
 
 [[package]]
 name = "themes"
-version = "0.10.1"
+version = "0.3.0"
 dependencies = [
  "iced",
  "iced_term",

@@ -26,16 +26,20 @@ The widget is currently under development and does not provide full terminal fea
 - PTY content rendering
 - Multiple instance support
 - Basic keyboard input
+- Adding custom keyboard or mouse bindings
 - Resizing
 - Scrolling
 - Focusing
+- Selecting
+- Changing Font/Color scheme
+- Hyperlinks processing (hover/open)
 
 This widget tested on MacOS and Linux and is not tested on Windows.
 
 ## Installation
 
 ```toml
-iced_term = "0.2.1"
+iced_term = "0.3.0"
 ```
 
 ## Overview
@@ -48,34 +52,37 @@ Interacting with the widget is happened via:
 #[derive(Debug, Clone)]
 pub enum Command {
     InitBackend(Sender<alacritty_terminal::event::Event>),
-    WriteToBackend(Vec<u8>),
-    Scroll(i32),
-    Resize(Size<f32>),
-    ProcessBackendEvent(alacritty_terminal::event::Event),
+    ChangeTheme(Box<ColorPalette>),
+    ChangeFont(FontSettings),
+    AddBindings(Vec<(Binding<InputKind>, BindingAction)>),
+    ProcessBackendCommand(BackendCommand),
 }
 ```
 
-**Events** - widget is produced some events that can be handled in application. Every event has the first `u64` argument that is **terminal instance id**
+**Events** - widget is produced some events that can be handled in application. Every event has the first `u64` argument that is **terminal instance id**.
 
 ```rust
 #[derive(Debug, Clone)]
 pub enum Event {
-    Scrolled(u64, f32),
-    Resized(u64, Size<f32>),
-    Ignored(u64),
-    InputReceived(u64, Vec<u8>),
-    BackendEventSenderReceived(u64, Sender<alacritty_terminal::event::Event>),
-    BackendEventReceived(u64, alacritty_terminal::event::Event),
+    CommandReceived(u64, Command),
+}
+```
+
+Right now there is the only internal **CommandReceived** event that is needed for backend <-> view communication. You can also handle this event unwrap the command and process command additionally if you want.
+
+**Actions** - widget's method `update(&mut self, cmd: Command)` returns **Action** that you can handle after widget updated.
+
+```rust
+#[derive(Debug, Clone, PartialEq)]
+pub enum Action {
+    Redraw,
+    Shutdown,
+    ChangeTitle,
+    Ignore,
 }
 ```
 
 For creating workable widget instance you need to do a few steps:
-
-Import widget
-
-```rust
-use iced_term;
-```
 
 Add widget to your app struct
 
@@ -104,9 +111,9 @@ impl Application for App {
                 size: 14.0,
                 ..iced_term::FontSettings::default()
             },
+            theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
                 shell: system_shell.to_string(),
-                ..iced_term::BackendSettings::default()
             },
         };
 
@@ -130,40 +137,19 @@ pub enum Message {
 }
 ```
 
-Add `IcedTermEvent` processing to application `update` method
+Add **IcedTermEvent** processing to application `update` method
 
 ```rust
 impl Application for App {
     // ... other methods
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
-            Message::IcedTermEvent(event) => {
-                match event {
-                    iced_term::Event::InputReceived(_, input) => {
-                        self.term.update(iced_term::Command::WriteToBackend(
-                            input,
-                        ));
-                    },
-                    iced_term::Event::Scrolled(_, delta) => {
-                        self.term.update(iced_term::Command::Scroll(delta as i32))
-                    },
-                    iced_term::Event::Resized(_, size) => {
-                        self.term.update(iced_term::Command::Resize(size));
-                    },
-                    iced_term::Event::BackendEventSenderReceived(_, tx) => {
-                        self.term.update(iced_term::Command::InitBackend(tx));
-                    },
-                    iced_term::Event::BackendEventReceived(_, inner_event) => {
-                        self.term.update(
-                            iced_term::Command::ProcessBackendEvent(
-                                inner_event,
-                            ),
-                        );
-                    },
-                    iced_term::Event::Ignored(_) => {},
-                };
-
-                Command::none()
+            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+                _,
+                cmd,
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => window::close(),
+                _ => Command::none(),
             },
         }
     }
@@ -195,13 +181,35 @@ impl Application for App {
 }
 ```
 
+Make main func
+
+```rust
+fn main() -> iced::Result {
+    App::run(Settings {
+        window: window::Settings {
+            size: (1280, 720),
+            ..window::Settings::default()
+        },
+        ..Settings::default()
+    })
+}
+```
+
 Run your application
 
 ```shell
 cargo run --release
 ```
 
+## Examples
+
 You can also look at [examples](./examples) directory for more information about widget using.
+
+- [full_screen](./examples/full_screen/) - The basic example of terminal emulator.
+- [split_view](./examples/split_view/) - The example based on split_view iced widget that show how multiple instance feature work.
+- [custom_bindings](./examples/custom_bindings/) - The example that show how you can add custom keyboard or mouse bindings to your terminal emulator app.
+- [themes](./examples/themes/) - The example that show how you can change terminal color scheme.
+- [fonts](./examples/fonts/) - The examples that show how you can change font type or font size in your terminal emulator app.
 
 ## Dependencies
 

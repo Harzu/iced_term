@@ -139,11 +139,20 @@ impl Term {
             },
             Command::ChangeTheme(palette) => {
                 self.theme = TermTheme::new(palette);
+                action = Action::Redraw;
                 self.sync_and_redraw();
             },
             Command::ChangeFont(font_settings) => {
                 self.font = TermFont::new(font_settings);
-                self.sync_and_redraw();
+                if let Some(ref mut backend) = self.backend {
+                    action = backend.process_command(BackendCommand::Resize(
+                        None,
+                        Some(self.font.measure()),
+                    ));
+                    if action == Action::Redraw {
+                        self.redraw();
+                    }
+                }
             },
             Command::AddBindings(bindings) => {
                 self.bindings.add_bindings(bindings);

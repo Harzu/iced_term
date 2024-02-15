@@ -2,6 +2,6 @@
 pub enum Action {
     Redraw,
     Shutdown,
-    Ignore,
     ChangeTitle,
+    Ignore,
 }

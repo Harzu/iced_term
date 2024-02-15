@@ -511,7 +511,8 @@ impl<'a> Widget<Event, iced::Renderer<Theme>> for TermView<'a> {
         if state.size != layout_size && self.term.backend().is_some() {
             state.size = layout_size;
             let cmd = Command::ProcessBackendCommand(BackendCommand::Resize(
-                layout_size,
+                Some(layout_size),
+                None,
             ));
             shell.publish(Event::CommandReceived(self.term.id(), cmd));
         }
