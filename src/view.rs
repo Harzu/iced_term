@@ -15,7 +15,6 @@ use iced_core::keyboard::{Key, Modifiers};
 use iced_core::mouse::{self, Click};
 use iced_core::text::{LineHeight, Shaping};
 use iced_core::widget::operation;
-use iced_core::SmolStr;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::{Renderer, Stroke};
@@ -258,12 +257,11 @@ impl<'a> TermView<'a> {
                     key,
                     location: _,
                     modifiers,
-                    text,
+                    text: _,
                 } => match key {
                     Key::Character(c) => {
-                        println!("{:?}", c);
                         binding_action = self.term.bindings().get_action(
-                            InputKind::Char(c.clone()),
+                            InputKind::Char(c.to_ascii_lowercase()),
                             state.keyboard_modifiers,
                             last_content.terminal_mode,
                         );

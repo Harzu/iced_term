@@ -5,6 +5,7 @@ use crate::bindings::{Binding, BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::theme::TermTheme;
 use crate::{ColorPalette, FontSettings};
+use alacritty_terminal::event::Event as AlacrittyEvent;
 use iced::futures::SinkExt;
 use iced::widget::canvas::Cache;
 use iced::Subscription;
@@ -105,19 +106,32 @@ impl Term {
                     panic!("iced_term subscription {}: sending BackendEventSenderReceived event is failed", id)
                 });
 
-            while let Some(event) = event_rx.recv().await {
-                let cmd = Command::ProcessBackendCommand(
-                    BackendCommand::ProcessAlacrittyEvent(event),
-                );
-                output
-                    .send(Event::CommandReceived(id, cmd))
-                    .await
-                    .unwrap_or_else(|_| {
-                        panic!("iced_term subscription {}: sending BackendEventReceived event is failed", id)
-                    });
-            }
+            let mut shutdown = false;
+            loop {
+                match event_rx.recv().await {
+                    Some(event) => {
+                        match event {
+                            AlacrittyEvent::Exit => shutdown = true,
+                            _ => {},
+                        };
 
-            panic!("iced_term subscription {}: terminal event channel closed unexpected", id);
+                        let cmd = Command::ProcessBackendCommand(
+                            BackendCommand::ProcessAlacrittyEvent(event),
+                        );
+                        output
+                            .send(Event::CommandReceived(id, cmd))
+                            .await
+                            .unwrap_or_else(|_| {
+                                panic!("iced_term subscription {}: sending BackendEventReceived event is failed", id)
+                            });
+                    },
+                    None => {
+                        if !shutdown {
+                            panic!("iced_term subscription {}: terminal event channel closed unexpected", id);
+                        }
+                    },
+                }
+            }
         })
     }
 

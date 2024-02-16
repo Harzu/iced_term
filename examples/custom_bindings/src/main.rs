@@ -1,4 +1,3 @@
-use iced::advanced::graphics::core::SmolStr;
 use iced::font::{Family, Stretch, Weight};
 use iced::keyboard::Modifiers;
 use iced::widget::container;
@@ -71,7 +70,7 @@ impl Application for App {
         let custom_bindings = vec![
             (
                 Binding {
-                    target: InputKind::Char(SmolStr::new("C")),
+                    target: InputKind::Char(String::from("c")),
                     modifiers: Modifiers::SHIFT,
                     terminal_mode_include: TermMode::ALT_SCREEN,
                     terminal_mode_exclude: TermMode::empty(),
@@ -80,7 +79,7 @@ impl Application for App {
             ),
             (
                 Binding {
-                    target: InputKind::Char(SmolStr::new("A")),
+                    target: InputKind::Char(String::from("a")),
                     modifiers: Modifiers::SHIFT | Modifiers::CTRL,
                     terminal_mode_include: TermMode::empty(),
                     terminal_mode_exclude: TermMode::empty(),
@@ -89,7 +88,7 @@ impl Application for App {
             ),
             (
                 Binding {
-                    target: InputKind::Char(SmolStr::new("B")),
+                    target: InputKind::Char(String::from("b")),
                     modifiers: Modifiers::SHIFT | Modifiers::CTRL,
                     terminal_mode_include: TermMode::empty(),
                     terminal_mode_exclude: TermMode::empty(),
@@ -103,7 +102,7 @@ impl Application for App {
         // You can also use generate_bindings macros
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
-            "L", Modifiers::SHIFT; BindingAction::Char('K');
+            "l", Modifiers::SHIFT; BindingAction::Char('K');
         );
         term.update(iced_term::Command::AddBindings(custom_bindings));
 
@@ -124,9 +123,11 @@ impl Application for App {
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
                 cmd,
-            )) => {
-                self.term.update(cmd);
-                Command::none()
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => {
+                    window::close(window::Id::MAIN)
+                },
+                _ => Command::none(),
             },
         }
     }

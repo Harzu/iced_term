@@ -128,9 +128,11 @@ impl Application for App {
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
                 cmd,
-            )) => {
-                self.term.update(cmd);
-                Command::none()
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => {
+                    window::close(window::Id::MAIN)
+                },
+                _ => Command::none(),
             },
         }
     }
