@@ -2,7 +2,8 @@ use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{
-    executor, window, Application, Command, Font, Length, Settings, Size, Subscription, Theme
+    executor, window, Application, Command, Font, Length, Settings, Size,
+    Subscription, Theme,
 };
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
@@ -15,7 +16,7 @@ fn main() -> iced::Result {
         window: window::Settings {
             size: Size {
                 width: 1280.0,
-                height: 720.0
+                height: 720.0,
             },
             ..window::Settings::default()
         },
@@ -50,13 +51,13 @@ impl Application for App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrains Mono"),
-                    ..Font::default()
+                    ..Default::default()
                 },
+                ..Default::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
-                // shell: system_shell.to_string(),
-                shell: "htop".to_string()
+                shell: system_shell.to_string(),
             },
         };
 
@@ -80,7 +81,9 @@ impl Application for App {
                 _,
                 cmd,
             )) => match self.term.update(cmd) {
-                // iced_term::actions::Action::Shutdown => window::close(window::Id),
+                iced_term::actions::Action::Shutdown => {
+                    window::close(window::Id::MAIN)
+                },
                 _ => Command::none(),
             },
         }

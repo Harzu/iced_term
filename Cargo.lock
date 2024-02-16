@@ -828,7 +828,7 @@ checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
 name = "custom_bindings"
 version = "0.3.0"
 dependencies = [
- "iced 0.10.0",
+ "iced 0.12.0",
  "iced_term",
 ]
 
@@ -1074,7 +1074,7 @@ dependencies = [
 name = "fonts"
 version = "0.3.0"
 dependencies = [
- "iced 0.10.0",
+ "iced 0.12.0",
  "iced_term",
 ]
 

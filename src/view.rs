@@ -10,11 +10,12 @@ use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Path, Text};
 use iced::widget::container;
 use iced::{Element, Length, Point, Rectangle, Size, Theme};
-use iced_core::keyboard::Modifiers;
+use iced_core::clipboard::Kind as ClipboardKind;
+use iced_core::keyboard::{Key, Modifiers};
 use iced_core::mouse::{self, Click};
-use iced_core::text::Shaping;
-use iced_core::clipboard::{ Kind as ClipboardKind };
+use iced_core::text::{LineHeight, Shaping};
 use iced_core::widget::operation;
+use iced_core::SmolStr;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::{Renderer, Stroke};
@@ -255,67 +256,66 @@ impl<'a> TermView<'a> {
                 },
                 iced::keyboard::Event::KeyPressed {
                     key,
-                    location: _, 
+                    location: _,
                     modifiers,
                     text,
-                } => {
-                    if let Some(key_content) = text {
-                        println!("{:?}", key_content);
-                        // binding_action = self.term.bindings().get_action(
-                        //     InputKind::Char(key_content.to_ascii_lowercase()),
-                        //     state.keyboard_modifiers,
-                        //     last_content.terminal_mode,
-                        // );
-    
-                        // if binding_action == BindingAction::Ignore
-                        //     && !c.is_control()
-                        // {
-                        //     let mut buf = [0, 0, 0, 0];
-                        //     let str = c.encode_utf8(&mut buf);
-                        //     return Some(Command::ProcessBackendCommand(
-                        //         BackendCommand::Write(str.as_bytes().to_vec()),
-                        //     ));
-                        // }
-                    }
+                } => match key {
+                    Key::Character(c) => {
+                        println!("{:?}", c);
+                        binding_action = self.term.bindings().get_action(
+                            InputKind::Char(c.clone()),
+                            state.keyboard_modifiers,
+                            last_content.terminal_mode,
+                        );
 
-                    // binding_action = self.term.bindings().get_action(
-                    //     InputKind::KeyCode(key),
-                    //     modifiers,
-                    //     last_content.terminal_mode,
-                    // );
+                        if binding_action == BindingAction::Ignore {
+                            return Some(Command::ProcessBackendCommand(
+                                BackendCommand::Write(c.as_bytes().to_vec()),
+                            ));
+                        }
+                    },
+                    Key::Named(code) => {
+                        binding_action = self.term.bindings().get_action(
+                            InputKind::KeyCode(code),
+                            modifiers,
+                            last_content.terminal_mode,
+                        );
+                    },
+                    _ => {},
                 },
                 _ => {},
             }
 
-            // match binding_action {
-            //     BindingAction::Char(c) => {
-            //         let mut buf = [0, 0, 0, 0];
-            //         let str = c.encode_utf8(&mut buf);
-            //         return Some(Command::ProcessBackendCommand(
-            //             BackendCommand::Write(str.as_bytes().to_vec()),
-            //         ));
-            //     },
-            //     BindingAction::Esc(seq) => {
-            //         return Some(Command::ProcessBackendCommand(
-            //             BackendCommand::Write(seq.as_bytes().to_vec()),
-            //         ));
-            //     },
-            //     BindingAction::Paste => {
-            //         if let Some(data) = clipboard.read(ClipboardKind::Standard) {
-            //             let input: Vec<u8> = data.bytes().collect();
-            //             return Some(Command::ProcessBackendCommand(
-            //                 BackendCommand::Write(input),
-            //             ));
-            //         }
-            //     },
-            //     BindingAction::Copy => {
-            //         clipboard.write(
-            //             ClipboardKind::Standard, 
-            //             backend.selectable_content(),
-            //         );
-            //     },
-            //     _ => {},
-            // };
+            match binding_action {
+                BindingAction::Char(c) => {
+                    let mut buf = [0, 0, 0, 0];
+                    let str = c.encode_utf8(&mut buf);
+                    return Some(Command::ProcessBackendCommand(
+                        BackendCommand::Write(str.as_bytes().to_vec()),
+                    ));
+                },
+                BindingAction::Esc(seq) => {
+                    return Some(Command::ProcessBackendCommand(
+                        BackendCommand::Write(seq.as_bytes().to_vec()),
+                    ));
+                },
+                BindingAction::Paste => {
+                    if let Some(data) = clipboard.read(ClipboardKind::Standard)
+                    {
+                        let input: Vec<u8> = data.bytes().collect();
+                        return Some(Command::ProcessBackendCommand(
+                            BackendCommand::Write(input),
+                        ));
+                    }
+                },
+                BindingAction::Copy => {
+                    clipboard.write(
+                        ClipboardKind::Standard,
+                        backend.selectable_content(),
+                    );
+                },
+                _ => {},
+            };
         }
 
         None
@@ -344,12 +344,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         _renderer: &iced::Renderer,
         limits: &iced_core::layout::Limits,
     ) -> iced_core::layout::Node {
-        let size = limits
-            .resolve(
-                Length::Fill,
-                Length::Fill,
-                Size::ZERO
-            );
+        let size = limits.resolve(Length::Fill, Length::Fill, Size::ZERO);
 
         iced::advanced::layout::Node::new(size)
     }
@@ -493,7 +488,9 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                             horizontal_alignment: Horizontal::Center,
                             vertical_alignment: Vertical::Center,
                             shaping: Shaping::Advanced,
-                            ..Text::default()
+                            line_height: LineHeight::Relative(
+                                self.term.font().scale_factor(),
+                            ),
                         };
 
                         frame.fill_text(text);
