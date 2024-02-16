@@ -1,9 +1,10 @@
 use iced::{Font, Size};
-use iced_core::text::LineHeight;
-use iced_graphics::text::{
-    self,
-    cosmic_text::{Metrics, Shaping, Wrap},
+use iced_core::{
+    alignment::{Horizontal, Vertical},
+    text::{LineHeight, Paragraph, Shaping as TextShaping},
+    Text,
 };
+use iced_graphics::text::paragraph;
 
 #[derive(Debug, Clone)]
 pub struct FontSettings {
@@ -66,26 +67,17 @@ fn font_measure(
     scale_factor: f32,
     font_type: Font,
 ) -> Size<f32> {
-    let metrics = Metrics::new(
-        font_size,
-        LineHeight::Relative(scale_factor)
-            .to_absolute(iced_core::Pixels(font_size))
-            .into(),
-    );
-    let mut buffer = text::cosmic_text::Buffer::new_empty(metrics);
-    let attrs = text::to_attributes(font_type);
+    let mut paragraph = paragraph::Paragraph::new();
+    paragraph.update(Text {
+        content: "A",
+        font: font_type,
+        size: iced_core::Pixels(font_size),
+        vertical_alignment: Vertical::Center,
+        horizontal_alignment: Horizontal::Center,
+        shaping: TextShaping::Advanced,
+        line_height: LineHeight::Relative(scale_factor),
+        bounds: Size::INFINITY,
+    });
 
-    let (width, height) = {
-        let mut font_system = text::font_system().write().unwrap();
-        let font_system = font_system.raw();
-        buffer.set_wrap(font_system, Wrap::None);
-
-        // Use size of space to determine cell size
-        buffer.set_text(font_system, "A", attrs, Shaping::Advanced);
-        let layout = buffer.line_layout(font_system, 0).unwrap();
-        let w = layout[0].w;
-        (w, metrics.line_height)
-    };
-
-    Size { width, height }
+    paragraph.min_bounds()
 }
