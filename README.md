@@ -39,7 +39,7 @@ This widget tested on MacOS and Linux and is not tested on Windows.
 ## Installation
 
 ```toml
-iced_term = "0.3.0"
+iced_term = "0.4.0"
 ```
 
 ## Overview

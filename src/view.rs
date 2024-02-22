@@ -1,5 +1,8 @@
-use crate::backend::{BackendCommand, LinkAction, MouseButton, MouseMode};
-use crate::bindings::{BindingAction, InputKind};
+use crate::backend::{
+    Backend, BackendCommand, LinkAction, MouseButton, MouseMode,
+    RenderableContent,
+};
+use crate::bindings::{BindingAction, BindingsLayout, InputKind};
 use crate::term::{Event, Term, ViewProxy};
 use crate::Command;
 use alacritty_terminal::index::Point as TerminalGridPoint;
@@ -81,148 +84,199 @@ impl<'a> TermView<'a> {
         cursor_position: Point,
         event: iced::mouse::Event,
     ) -> Vec<Command> {
-        let mut commands = vec![];
-        if let Some(ref backend) = self.term.backend() {
+        let mut commands = Vec::new();
+        if let Some(backend) = self.term.backend() {
             let terminal_content = backend.renderable_content();
             let terminal_mode = terminal_content.terminal_mode;
+
             match event {
                 iced_core::mouse::Event::ButtonPressed(
                     iced_core::mouse::Button::Left,
                 ) => {
-                    let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
-                        && state.keyboard_modifiers.is_empty()
-                    {
-                        Command::ProcessBackendCommand(
-                            BackendCommand::MouseReport(
-                                MouseMode::Sgr,
-                                MouseButton::LeftButton,
-                                state.mouse_position_on_grid,
-                                true,
-                            ),
-                        )
-                    } else {
-                        let current_click =
-                            Click::new(cursor_position, state.last_click);
-                        let selction_type = match current_click.kind() {
-                            mouse::click::Kind::Single => SelectionType::Simple,
-                            mouse::click::Kind::Double => {
-                                SelectionType::Semantic
-                            },
-                            mouse::click::Kind::Triple => SelectionType::Lines,
-                        };
-                        state.last_click = Some(current_click);
-                        Command::ProcessBackendCommand(
-                            BackendCommand::SelectStart(
-                                selction_type,
-                                (
-                                    cursor_position.x - layout_position.x,
-                                    cursor_position.y - layout_position.y,
-                                ),
-                            ),
-                        )
-                    };
-                    commands.push(cmd);
-                    state.is_dragged = true;
+                    Self::handle_left_button_pressed(
+                        state,
+                        &terminal_mode,
+                        cursor_position,
+                        layout_position,
+                        &mut commands,
+                    );
                 },
                 iced_core::mouse::Event::CursorMoved { position } => {
-                    let cursor_x = position.x - layout_position.x;
-                    let cursor_y = position.y - layout_position.y;
-                    state.mouse_position_on_grid = backend.selection_point(
-                        cursor_x,
-                        cursor_y,
-                        terminal_content.grid.display_offset(),
+                    Self::handle_cursor_moved(
+                        state,
+                        backend.renderable_content(),
+                        position,
+                        layout_position,
+                        &mut commands,
                     );
-
-                    if state.keyboard_modifiers == Modifiers::COMMAND {
-                        commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::ProcessLink(
-                                LinkAction::Hover,
-                                state.mouse_position_on_grid,
-                            ),
-                        ));
-                    }
-
-                    if state.is_dragged {
-                        let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
-                            && state.keyboard_modifiers.is_empty()
-                        {
-                            Command::ProcessBackendCommand(
-                                BackendCommand::MouseReport(
-                                    MouseMode::Sgr,
-                                    MouseButton::LeftMove,
-                                    state.mouse_position_on_grid,
-                                    true,
-                                ),
-                            )
-                        } else {
-                            Command::ProcessBackendCommand(
-                                BackendCommand::SelectUpdate((
-                                    cursor_x, cursor_y,
-                                )),
-                            )
-                        };
-                        commands.push(cmd);
-                    }
                 },
                 iced_core::mouse::Event::ButtonReleased(
                     iced_core::mouse::Button::Left,
                 ) => {
-                    if self.term.bindings().get_action(
-                        InputKind::Mouse(iced_core::mouse::Button::Left),
-                        state.keyboard_modifiers,
-                        terminal_content.terminal_mode,
-                    ) == BindingAction::LinkOpen
-                    {
-                        commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::ProcessLink(
-                                LinkAction::Open,
-                                state.mouse_position_on_grid,
-                            ),
-                        ));
-                    };
-
-                    state.is_dragged = false;
-                    if terminal_mode.contains(TermMode::SGR_MOUSE) {
-                        commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::MouseReport(
-                                MouseMode::Sgr,
-                                MouseButton::LeftButton,
-                                state.mouse_position_on_grid,
-                                false,
-                            ),
-                        ));
-                    }
+                    Self::handle_button_released(
+                        state,
+                        &terminal_mode,
+                        self.term.bindings(),
+                        &mut commands,
+                    );
                 },
-                iced::mouse::Event::WheelScrolled { delta } => match delta {
-                    ScrollDelta::Lines { x: _, y } => {
-                        state.scroll_pixels = 0.0;
-                        let lines = if y <= 0.0 { y.floor() } else { y.ceil() };
-                        commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::Scroll(lines as i32),
-                        ));
-                    },
-                    ScrollDelta::Pixels { x: _, y } => {
-                        state.scroll_pixels -= y;
-                        let mut lines = 0;
-                        let line_height = self.term.font().measure().height;
-                        while state.scroll_pixels <= -line_height {
-                            lines -= 1;
-                            state.scroll_pixels += line_height;
-                        }
-                        while state.scroll_pixels >= line_height {
-                            lines += 1;
-                            state.scroll_pixels -= line_height;
-                        }
-                        commands.push(Command::ProcessBackendCommand(
-                            BackendCommand::Scroll(-lines),
-                        ));
-                    },
+                iced::mouse::Event::WheelScrolled { delta } => {
+                    Self::handle_wheel_scrolled(
+                        state,
+                        delta,
+                        &self.term.font().measure(),
+                        &mut commands,
+                    );
                 },
                 _ => {},
             }
         }
 
         commands
+    }
+
+    fn handle_left_button_pressed(
+        state: &mut TermViewState,
+        terminal_mode: &TermMode,
+        cursor_position: Point,
+        layout_position: Point,
+        commands: &mut Vec<Command>,
+    ) {
+        let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
+            && state.keyboard_modifiers.is_empty()
+        {
+            Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                MouseMode::Sgr,
+                MouseButton::LeftButton,
+                state.mouse_position_on_grid,
+                true,
+            ))
+        } else {
+            let current_click = Click::new(cursor_position, state.last_click);
+            let selection_type = match current_click.kind() {
+                mouse::click::Kind::Single => SelectionType::Simple,
+                mouse::click::Kind::Double => SelectionType::Semantic,
+                mouse::click::Kind::Triple => SelectionType::Lines,
+            };
+            state.last_click = Some(current_click);
+            Command::ProcessBackendCommand(BackendCommand::SelectStart(
+                selection_type,
+                (
+                    cursor_position.x - layout_position.x,
+                    cursor_position.y - layout_position.y,
+                ),
+            ))
+        };
+        commands.push(cmd);
+        state.is_dragged = true;
+    }
+
+    fn handle_cursor_moved(
+        state: &mut TermViewState,
+        terminal_content: &RenderableContent,
+        position: Point,
+        layout_position: Point,
+        commands: &mut Vec<Command>,
+    ) {
+        let cursor_x = position.x - layout_position.x;
+        let cursor_y = position.y - layout_position.y;
+        state.mouse_position_on_grid = Backend::selection_point(
+            cursor_x,
+            cursor_y,
+            &terminal_content.terminal_size,
+            terminal_content.grid.display_offset(),
+        );
+
+        // Handle command or selection update based on terminal mode and modifiers
+        if state.is_dragged {
+            let terminal_mode = terminal_content.terminal_mode;
+            let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
+                && state.keyboard_modifiers.is_empty()
+            {
+                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                    MouseMode::Sgr,
+                    MouseButton::LeftMove,
+                    state.mouse_position_on_grid,
+                    true,
+                ))
+            } else {
+                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
+                    cursor_x, cursor_y,
+                )))
+            };
+            commands.push(cmd);
+        }
+
+        // Handle link hover if applicable
+        if state.keyboard_modifiers == Modifiers::COMMAND {
+            commands.push(Command::ProcessBackendCommand(
+                BackendCommand::ProcessLink(
+                    LinkAction::Hover,
+                    state.mouse_position_on_grid,
+                ),
+            ));
+        }
+    }
+
+    fn handle_button_released(
+        state: &mut TermViewState,
+        terminal_mode: &TermMode,
+        bindings: &BindingsLayout, // Use the actual type of your bindings here
+        commands: &mut Vec<Command>,
+    ) {
+        state.is_dragged = false;
+
+        if terminal_mode.contains(TermMode::SGR_MOUSE) {
+            commands.push(Command::ProcessBackendCommand(
+                BackendCommand::MouseReport(
+                    MouseMode::Sgr,
+                    MouseButton::LeftButton,
+                    state.mouse_position_on_grid,
+                    false,
+                ),
+            ));
+        }
+
+        if bindings.get_action(
+            InputKind::Mouse(iced_core::mouse::Button::Left),
+            state.keyboard_modifiers,
+            *terminal_mode,
+        ) == BindingAction::LinkOpen
+        {
+            commands.push(Command::ProcessBackendCommand(
+                BackendCommand::ProcessLink(
+                    LinkAction::Open,
+                    state.mouse_position_on_grid,
+                ),
+            ));
+        }
+    }
+
+    fn handle_wheel_scrolled(
+        state: &mut TermViewState,
+        delta: ScrollDelta,
+        font_measure: &Size<f32>,
+        commands: &mut Vec<Command>,
+    ) {
+        match delta {
+            ScrollDelta::Lines { y, .. } => {
+                let lines = y.signum() * y.abs().round();
+                commands.push(Command::ProcessBackendCommand(
+                    BackendCommand::Scroll(lines as i32),
+                ));
+            },
+            ScrollDelta::Pixels { y, .. } => {
+                state.scroll_pixels -= y;
+                let line_height = font_measure.height; // Assume this method exists and gives the height of a line
+                let lines = (state.scroll_pixels / line_height).trunc();
+                state.scroll_pixels %= line_height;
+                if lines != 0.0 {
+                    commands.push(Command::ProcessBackendCommand(
+                        BackendCommand::Scroll(lines as i32),
+                    ));
+                }
+            },
+        }
     }
 
     fn handle_keyboard_event(
@@ -237,21 +291,18 @@ impl<'a> TermView<'a> {
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
                     state.keyboard_modifiers = m;
-                    if state.keyboard_modifiers == Modifiers::COMMAND {
-                        return Some(Command::ProcessBackendCommand(
-                            BackendCommand::ProcessLink(
-                                LinkAction::Hover,
-                                state.mouse_position_on_grid,
-                            ),
-                        ));
-                    } else {
-                        return Some(Command::ProcessBackendCommand(
-                            BackendCommand::ProcessLink(
-                                LinkAction::Clear,
-                                state.mouse_position_on_grid,
-                            ),
-                        ));
-                    }
+                    let action =
+                        if state.keyboard_modifiers == Modifiers::COMMAND {
+                            LinkAction::Hover
+                        } else {
+                            LinkAction::Clear
+                        };
+                    return Some(Command::ProcessBackendCommand(
+                        BackendCommand::ProcessLink(
+                            action,
+                            state.mouse_position_on_grid,
+                        ),
+                    ));
                 },
                 iced::keyboard::Event::KeyPressed {
                     key,
@@ -343,7 +394,6 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         limits: &iced_core::layout::Limits,
     ) -> iced_core::layout::Node {
         let size = limits.resolve(Length::Fill, Length::Fill, Size::ZERO);
-
         iced::advanced::layout::Node::new(size)
     }
 
@@ -369,135 +419,135 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        let state = tree.state.downcast_ref::<TermViewState>();
-        let geom = self.term.cache().draw(renderer, viewport.size(), |frame| {
-            if let Some(ref backend) = self.term.backend() {
-                let content = backend.renderable_content();
-                for indexed in content.grid.display_iter() {
-                    let cell_width = content.terminal_size.cell_width as f64;
-                    let cell_height = content.terminal_size.cell_height as f64;
-                    let x = indexed.point.column.0 as f64 * cell_width;
-                    let y = (indexed.point.line.0 as f64
-                        + content.grid.display_offset() as f64)
-                        * cell_height;
+        if let Some(ref backend) = self.term.backend() {
+            let state = tree.state.downcast_ref::<TermViewState>();
+            let content = backend.renderable_content();
+            let term_size = content.terminal_size;
+            let cell_width = term_size.cell_width as f64;
+            let cell_height = term_size.cell_height as f64;
+            let font_size = self.term.font().size();
+            let font_scale_factor = self.term.font().scale_factor();
+            let layout_offset_x = layout.position().x;
+            let layout_offset_y = layout.position().y;
 
-                    let mut fg = self.term.theme().get_color(indexed.fg);
-                    let mut bg = self.term.theme().get_color(indexed.bg);
+            let geom =
+                self.term.cache().draw(renderer, viewport.size(), |frame| {
+                    for indexed in content.grid.display_iter() {
+                        let x = indexed.point.column.0 as f64 * cell_width;
+                        let y = (indexed.point.line.0 as f64
+                            + content.grid.display_offset() as f64)
+                            * cell_height;
 
-                    if indexed.cell.flags.intersects(cell::Flags::DIM)
-                        || indexed.cell.flags.intersects(cell::Flags::DIM_BOLD)
-                    {
-                        fg.a *= 0.7;
-                    }
+                        let mut fg = self.term.theme().get_color(indexed.fg);
+                        let mut bg = self.term.theme().get_color(indexed.bg);
 
-                    if indexed.cell.flags.contains(cell::Flags::INVERSE) {
-                        std::mem::swap(&mut fg, &mut bg);
-                    }
-
-                    if let Some(range) = content.selectable_range {
-                        if range.contains(indexed.point) {
+                        // Handle dim, inverse, and selected text
+                        if indexed.cell.flags.intersects(
+                            cell::Flags::DIM | cell::Flags::DIM_BOLD,
+                        ) {
+                            fg.a *= 0.7;
+                        }
+                        if indexed.cell.flags.contains(cell::Flags::INVERSE)
+                            || content
+                                .selectable_range
+                                .map_or(false, |r| r.contains(indexed.point))
+                        {
                             std::mem::swap(&mut fg, &mut bg);
                         }
-                    }
 
-                    let cell_size =
-                        Size::new(cell_width as f32, cell_height as f32);
-                    let background = Path::rectangle(
-                        Point {
-                            x: layout.position().x + x as f32,
-                            y: layout.position().y + y as f32,
-                        },
-                        cell_size,
-                    );
-                    frame.fill(&background, bg);
+                        let cell_size =
+                            Size::new(cell_width as f32, cell_height as f32);
 
-                    if let Some(range) = &content.hovered_hyperlink {
-                        if range.contains(&indexed.point)
-                            && range.contains(&state.mouse_position_on_grid)
-                        {
+                        // Draw cell background
+                        let background = Path::rectangle(
+                            Point::new(
+                                layout_offset_x + x as f32,
+                                layout_offset_y + y as f32,
+                            ),
+                            cell_size,
+                        );
+                        frame.fill(&background, bg);
+
+                        // Draw hovered hyperlink underline
+                        if content.hovered_hyperlink.as_ref().map_or(
+                            false,
+                            |range| {
+                                range.contains(&indexed.point)
+                                    && range
+                                        .contains(&state.mouse_position_on_grid)
+                            },
+                        ) {
+                            let underline_height = y as f32 + cell_size.height;
                             let underline = Path::line(
-                                Point {
-                                    x: layout.position().x + x as f32,
-                                    y: layout.position().y
-                                        + y as f32
-                                        + cell_size.height,
-                                },
-                                Point {
-                                    x: layout.position().x
+                                Point::new(
+                                    layout_offset_x + x as f32,
+                                    layout_offset_y + underline_height,
+                                ),
+                                Point::new(
+                                    layout_offset_x
                                         + x as f32
                                         + cell_size.width,
-                                    y: layout.position().y
-                                        + y as f32
-                                        + cell_size.height,
-                                },
+                                    layout_offset_y + underline_height,
+                                ),
                             );
-
                             frame.stroke(
                                 &underline,
                                 Stroke::default()
-                                    .with_width(self.term.font().size() * 0.15)
+                                    .with_width(font_size * 0.15)
                                     .with_color(fg),
-                            )
-                        }
-                    }
-
-                    if content.grid.cursor.point == indexed.point {
-                        let cursor_rect = Path::rectangle(
-                            Point {
-                                x: layout.position().x
-                                    + content.grid.cursor.point.column.0 as f32
-                                        * cell_width as f32,
-                                y: layout.position().y
-                                    + (content.grid.cursor.point.line.0
-                                        + content.grid.display_offset() as i32)
-                                        as f32
-                                        * cell_height as f32,
-                            },
-                            Size::new(cell_width as f32, cell_height as f32),
-                        );
-
-                        let cursor_color =
-                            self.term.theme().get_color(content.cursor.fg);
-                        frame.fill(&cursor_rect, cursor_color);
-                    }
-
-                    if indexed.c != ' ' && indexed.c != '\t' {
-                        if content.grid.cursor.point == indexed.point
-                            && content
-                                .terminal_mode
-                                .contains(TermMode::APP_CURSOR)
-                        {
-                            fg = bg;
+                            );
                         }
 
-                        let text = Text {
-                            content: indexed.c.to_string(),
-                            position: Point {
-                                x: layout.position().x
-                                    + x as f32
-                                    + cell_size.width / 2.0,
-                                y: layout.position().y
-                                    + y as f32
-                                    + cell_size.height / 2.0,
-                            },
-                            font: self.term.font().font_type(),
-                            size: iced_core::Pixels(self.term.font().size()),
-                            color: fg,
-                            horizontal_alignment: Horizontal::Center,
-                            vertical_alignment: Vertical::Center,
-                            shaping: Shaping::Advanced,
-                            line_height: LineHeight::Relative(
-                                self.term.font().scale_factor(),
-                            ),
-                        };
+                        // Handle cursor rendering
+                        if content.grid.cursor.point == indexed.point {
+                            let cursor_color =
+                                self.term.theme().get_color(content.cursor.fg);
+                            let cursor_rect = Path::rectangle(
+                                Point::new(
+                                    layout_offset_x + x as f32,
+                                    layout_offset_y + y as f32,
+                                ),
+                                cell_size,
+                            );
+                            frame.fill(&cursor_rect, cursor_color);
+                        }
 
-                        frame.fill_text(text);
+                        // Draw text
+                        if indexed.c != ' ' && indexed.c != '\t' {
+                            if content.grid.cursor.point == indexed.point
+                                && content
+                                    .terminal_mode
+                                    .contains(TermMode::APP_CURSOR)
+                            {
+                                fg = bg;
+                            }
+                            let text = Text {
+                                content: indexed.c.to_string(),
+                                position: Point::new(
+                                    layout_offset_x
+                                        + x as f32
+                                        + cell_size.width / 2.0,
+                                    layout_offset_y
+                                        + y as f32
+                                        + cell_size.height / 2.0,
+                                ),
+                                font: self.term.font().font_type(),
+                                size: iced_core::Pixels(font_size),
+                                color: fg,
+                                horizontal_alignment: Horizontal::Center,
+                                vertical_alignment: Vertical::Center,
+                                shaping: Shaping::Advanced,
+                                line_height: LineHeight::Relative(
+                                    font_scale_factor,
+                                ),
+                            };
+                            frame.fill_text(text);
+                        }
                     }
-                }
-            }
-        });
+                });
 
-        renderer.draw(vec![geom]);
+            renderer.draw(vec![geom]);
+        }
     }
 
     fn on_event(
@@ -526,27 +576,23 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
             return iced::event::Status::Ignored;
         }
 
-        let mut commands = vec![];
-        match event {
-            iced::Event::Mouse(mouse_event) => {
-                if self.is_cursor_in_layout(cursor, layout) {
-                    let cursor_position = cursor.position().unwrap();
-                    commands = self.handle_mouse_event(
-                        state,
-                        layout.position(),
-                        cursor_position,
-                        mouse_event,
-                    )
-                }
+        let commands = match event {
+            iced::Event::Mouse(mouse_event)
+                if self.is_cursor_in_layout(cursor, layout) =>
+            {
+                self.handle_mouse_event(
+                    state,
+                    layout.position(),
+                    cursor.position().unwrap(), // Assuming cursor position is always available here.
+                    mouse_event,
+                )
             },
             iced::Event::Keyboard(keyboard_event) => {
-                if let Some(cmd) =
-                    self.handle_keyboard_event(state, clipboard, keyboard_event)
-                {
-                    commands.push(cmd);
-                }
+                self.handle_keyboard_event(state, clipboard, keyboard_event)
+                    .into_iter() // Convert Option to iterator (0 or 1 element)
+                    .collect()
             },
-            _ => {},
+            _ => Vec::new(), // No commands for other events.
         };
 
         if !commands.is_empty() {
@@ -635,5 +681,473 @@ impl operation::Focusable for TermViewState {
 
     fn unfocus(&mut self) {
         self.is_focused = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod handle_left_button_pressed_tests {
+        use super::*;
+        use alacritty_terminal::index::{Column, Line};
+
+        #[test]
+        fn handles_sgr_mouse_mode_with_left_click() {
+            let mut state = TermViewState::new();
+            let terminal_mode = TermMode::SGR_MOUSE;
+            let layout_position = Point { x: 5.0, y: 5.0 };
+            let cursor_position = Point { x: 100.0, y: 150.0 };
+            let mut commands = Vec::new();
+
+            TermView::handle_left_button_pressed(
+                &mut state,
+                &terminal_mode,
+                cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                    MouseMode::Sgr,
+                    MouseButton::LeftButton,
+                    TerminalGridPoint {
+                        line: Line(0),
+                        column: Column(0),
+                    },
+                    true,
+                ))
+            ));
+            assert!(state.is_dragged);
+        }
+
+        #[test]
+        fn starts_simple_selection_with_left_click() {
+            let terminal_mode = TermMode::SGR_MOUSE;
+            let cursor_position = Point { x: 200.0, y: 150.0 };
+            let layout_position = Point { x: 50.0, y: 50.0 };
+
+            let cases = vec![
+                SelectionType::Simple,
+                SelectionType::Semantic,
+                SelectionType::Lines,
+            ];
+
+            for selection_type in cases {
+                let mut state = TermViewState::new();
+                state.keyboard_modifiers = Modifiers::SHIFT;
+                let mut commands = Vec::new();
+
+                TermView::handle_left_button_pressed(
+                    &mut state,
+                    &terminal_mode,
+                    cursor_position,
+                    layout_position,
+                    &mut commands,
+                );
+
+                assert_eq!(commands.len(), 1);
+                assert!(matches!(
+                    commands[0],
+                    Command::ProcessBackendCommand(
+                        BackendCommand::SelectStart(
+                            selection_type,
+                            (150.0, 100.0)
+                        )
+                    ),
+                ));
+                assert!(state.is_dragged);
+            }
+        }
+    }
+
+    mod handle_cursor_moved_tests {
+        use alacritty_terminal::index::{Column, Line};
+
+        use super::*;
+
+        #[test]
+        fn updates_mouse_position_on_grid() {
+            let mut state = TermViewState::new();
+            let terminal_content = RenderableContent::default();
+            let mut commands = Vec::new();
+            let cases = vec![
+                (
+                    Point { x: 0.0, y: 0.0 },
+                    Point { x: 1.0, y: 1.0 },
+                    TerminalGridPoint {
+                        line: Line(1),
+                        column: Column(1),
+                    },
+                ),
+                (
+                    Point { x: 0.0, y: 0.0 },
+                    Point { x: 2.0, y: 2.0 },
+                    TerminalGridPoint {
+                        line: Line(2),
+                        column: Column(2),
+                    },
+                ),
+                (
+                    Point { x: 0.0, y: 0.0 },
+                    Point { x: 30.0, y: 2.0 },
+                    TerminalGridPoint {
+                        line: Line(2),
+                        column: Column(30),
+                    },
+                ),
+                (
+                    Point { x: 10.0, y: 0.0 },
+                    Point { x: 30.0, y: 2.0 },
+                    TerminalGridPoint {
+                        line: Line(2),
+                        column: Column(20),
+                    },
+                ),
+                (
+                    Point { x: 10.0, y: 10.0 },
+                    Point { x: 30.0, y: 2.0 },
+                    TerminalGridPoint {
+                        line: Line(0),
+                        column: Column(20),
+                    },
+                ),
+            ];
+
+            for (layout_position, cursor_position, expected) in cases {
+                TermView::handle_cursor_moved(
+                    &mut state,
+                    &terminal_content,
+                    cursor_position,
+                    layout_position,
+                    &mut commands,
+                );
+
+                assert_eq!(state.mouse_position_on_grid, expected);
+            }
+        }
+
+        #[test]
+        fn generates_drag_update_command_when_dragged() {
+            let mut state = TermViewState::new();
+            state.is_dragged = true; // Simulate an ongoing drag operation
+            let terminal_content = RenderableContent::default();
+            let layout_position = Point { x: 5.0, y: 5.0 };
+            let cursor_position = Point { x: 100.0, y: 150.0 };
+            let mut commands = Vec::new();
+
+            TermView::handle_cursor_moved(
+                &mut state,
+                &terminal_content,
+                cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
+                    95.0, 145.0
+                )))
+            ));
+        }
+
+        #[test]
+        fn generates_drag_update_command_when_dragged_in_srg_mode() {
+            let mut state = TermViewState::new();
+            state.is_dragged = true; // Simulate an ongoing drag operation
+            let mut terminal_content = RenderableContent::default();
+            terminal_content.terminal_mode = TermMode::SGR_MOUSE;
+            let layout_position = Point { x: 5.0, y: 5.0 };
+            let cursor_position = Point { x: 100.0, y: 150.0 };
+            let mut commands = Vec::new();
+
+            TermView::handle_cursor_moved(
+                &mut state,
+                &terminal_content,
+                cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                    MouseMode::Sgr,
+                    MouseButton::LeftMove,
+                    TerminalGridPoint {
+                        line: Line(49),
+                        column: Column(79),
+                    },
+                    true,
+                ))
+            ));
+        }
+
+        #[test]
+        fn generates_drag_update_command_when_dragged_in_srg_mode_with_key_mods(
+        ) {
+            let mut state = TermViewState::new();
+            state.keyboard_modifiers = Modifiers::SHIFT;
+            state.is_dragged = true; // Simulate an ongoing drag operation
+            let mut terminal_content = RenderableContent::default();
+            terminal_content.terminal_mode = TermMode::SGR_MOUSE;
+            let layout_position = Point { x: 5.0, y: 5.0 };
+            let cursor_position = Point { x: 100.0, y: 150.0 };
+            let mut commands = Vec::new();
+
+            TermView::handle_cursor_moved(
+                &mut state,
+                &terminal_content,
+                cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
+                    95.0, 145.0
+                )))
+            ));
+        }
+
+        #[test]
+        fn generates_drag_update_and_link_open() {
+            let mut state = TermViewState::new();
+            state.keyboard_modifiers = Modifiers::COMMAND;
+            state.is_dragged = true; // Simulate an ongoing drag operation
+            let mut terminal_content = RenderableContent::default();
+            terminal_content.terminal_mode = TermMode::SGR_MOUSE;
+            let layout_position = Point { x: 5.0, y: 5.0 };
+            let cursor_position = Point { x: 100.0, y: 150.0 };
+            let mut commands = Vec::new();
+
+            TermView::handle_cursor_moved(
+                &mut state,
+                &terminal_content,
+                cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 2);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
+                    95.0, 145.0
+                )))
+            ));
+            assert!(matches!(
+                commands[1],
+                Command::ProcessBackendCommand(BackendCommand::ProcessLink(
+                    LinkAction::Hover,
+                    TerminalGridPoint {
+                        line: Line(49),
+                        column: Column(79),
+                    },
+                ))
+            ));
+        }
+    }
+
+    mod handle_button_released_tests {
+        use super::*;
+        use alacritty_terminal::index::{Column, Line};
+
+        #[test]
+        fn sgr_mouse_mode_activated() {
+            let mut state = TermViewState::new();
+            let terminal_mode = TermMode::SGR_MOUSE;
+            let bindings = BindingsLayout::new();
+            let mut commands = Vec::new();
+
+            TermView::handle_button_released(
+                &mut state,
+                &terminal_mode,
+                &bindings,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                    MouseMode::Sgr,
+                    MouseButton::LeftButton,
+                    TerminalGridPoint {
+                        line: Line(0),
+                        column: Column(0)
+                    },
+                    false
+                )),
+            ));
+        }
+
+        #[test]
+        fn link_open_on_button_release() {
+            let mut state = TermViewState::new();
+            state.keyboard_modifiers = Modifiers::COMMAND;
+            let terminal_mode = TermMode::SGR_MOUSE; // Assume SGR_MOUSE mode doesn't affect link opening
+            let bindings = BindingsLayout::new();
+            let mut commands = Vec::new();
+
+            TermView::handle_button_released(
+                &mut state,
+                &terminal_mode,
+                &bindings,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 2);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                    MouseMode::Sgr,
+                    MouseButton::LeftButton,
+                    TerminalGridPoint {
+                        line: Line(0),
+                        column: Column(0)
+                    },
+                    false
+                )),
+            ));
+            assert!(matches!(
+                commands[1],
+                Command::ProcessBackendCommand(BackendCommand::ProcessLink(
+                    LinkAction::Open,
+                    TerminalGridPoint {
+                        line: Line(0),
+                        column: Column(0)
+                    }
+                )),
+            ));
+        }
+
+        #[test]
+        fn link_open_on_button_release_in_non_srg_mode() {
+            let mut state = TermViewState::new();
+            state.keyboard_modifiers = Modifiers::COMMAND;
+            state.mouse_position_on_grid = TerminalGridPoint {
+                line: Line(4),
+                column: Column(10),
+            };
+            let terminal_mode = TermMode::empty(); // Assume SGR_MOUSE mode doesn't affect link opening
+            let bindings = BindingsLayout::new();
+            let mut commands = Vec::new();
+
+            TermView::handle_button_released(
+                &mut state,
+                &terminal_mode,
+                &bindings,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::ProcessLink(
+                    LinkAction::Open,
+                    TerminalGridPoint {
+                        line: Line(4),
+                        column: Column(10)
+                    }
+                )),
+            ));
+        }
+    }
+
+    mod handle_wheel_scrolled_tests {
+        use super::*;
+        use crate::font::TermFont;
+        use crate::FontSettings;
+
+        #[test]
+        fn scroll_with_lines_downward() {
+            let mut state = TermViewState::new();
+            let font = TermFont::new(FontSettings::default());
+            let mut commands = Vec::new();
+
+            TermView::handle_wheel_scrolled(
+                &mut state,
+                ScrollDelta::Lines { y: 3.0, x: 0.0 }, // Scroll down 3 lines
+                &font.measure(),
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::Scroll(3))
+            ));
+        }
+
+        #[test]
+        fn scroll_with_lines_upward() {
+            let mut state = TermViewState::new();
+            let font = TermFont::new(FontSettings::default());
+            let mut commands = Vec::new();
+
+            TermView::handle_wheel_scrolled(
+                &mut state,
+                ScrollDelta::Lines { y: -2.0, x: 0.0 },
+                &font.measure(),
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::Scroll(-2))
+            ));
+        }
+
+        #[test]
+        fn scroll_with_pixels_accumulating_downward() {
+            let mut state = TermViewState::new();
+            let font = TermFont::new(FontSettings::default());
+            let mut commands = Vec::new();
+
+            TermView::handle_wheel_scrolled(
+                &mut state,
+                ScrollDelta::Pixels { y: 45.0, x: 0.0 },
+                &font.measure(),
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::Scroll(-2))
+            ));
+            assert_eq!(state.scroll_pixels, -8.600002);
+        }
+
+        #[test]
+        fn scroll_with_pixels_accumulating_upward() {
+            let mut state = TermViewState::new();
+            let font = TermFont::new(FontSettings::default());
+            let mut commands = Vec::new();
+
+            TermView::handle_wheel_scrolled(
+                &mut state,
+                ScrollDelta::Pixels { y: -60.0, x: 0.0 },
+                &font.measure(),
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::ProcessBackendCommand(BackendCommand::Scroll(3))
+            ));
+            assert_eq!(state.scroll_pixels, 5.4000034);
+        }
     }
 }

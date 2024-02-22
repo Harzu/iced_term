@@ -23,7 +23,6 @@ iced = { version = "0.12.0", features = [
 ] }
 tokio = { version = "1.36.0", features = ["full"] }
 iced_graphics = "0.12.0"
-iced_tiny_skia = "0.12.0"
 iced_core = "0.12.0"
 open = "5"
 anyhow = "1.0.79"

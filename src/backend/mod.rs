@@ -310,8 +310,12 @@ impl Backend {
         x: f32,
         y: f32,
     ) {
-        let location =
-            self.selection_point(x, y, terminal.grid().display_offset());
+        let location = Self::selection_point(
+            x,
+            y,
+            &self.size,
+            terminal.grid().display_offset(),
+        );
         terminal.selection = Some(Selection::new(
             selection_type,
             location,
@@ -327,22 +331,23 @@ impl Backend {
     ) {
         let display_offset = terminal.grid().display_offset();
         if let Some(ref mut selection) = terminal.selection {
-            let location = self.selection_point(x, y, display_offset);
+            let location =
+                Self::selection_point(x, y, &self.size, display_offset);
             selection.update(location, self.selection_side(x));
         }
     }
 
     pub fn selection_point(
-        &self,
         x: f32,
         y: f32,
+        terminal_size: &TerminalSize,
         display_offset: usize,
     ) -> Point {
-        let col = (x as usize) / (self.size.cell_width as usize);
-        let col = min(Column(col), Column(self.size.num_cols as usize - 1));
+        let col = (x as usize) / (terminal_size.cell_width as usize);
+        let col = min(Column(col), Column(terminal_size.num_cols as usize - 1));
 
-        let line = (y as usize) / (self.size.cell_height as usize);
-        let line = min(line, self.size.num_lines as usize - 1);
+        let line = (y as usize) / (terminal_size.cell_height as usize);
+        let line = min(line, terminal_size.num_lines as usize - 1);
 
         viewport_to_point(display_offset, Point::new(line, col))
     }
@@ -493,6 +498,19 @@ pub struct RenderableContent {
     pub cursor: Cell,
     pub terminal_mode: TermMode,
     pub terminal_size: TerminalSize,
+}
+
+impl Default for RenderableContent {
+    fn default() -> Self {
+        Self {
+            grid: Grid::new(0, 0, 0),
+            hovered_hyperlink: None,
+            selectable_range: None,
+            cursor: Cell::default(),
+            terminal_mode: TermMode::empty(),
+            terminal_size: TerminalSize::default(),
+        }
+    }
 }
 
 impl Drop for Backend {

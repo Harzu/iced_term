@@ -110,11 +110,9 @@ impl Term {
             loop {
                 match event_rx.recv().await {
                     Some(event) => {
-                        match event {
-                            AlacrittyEvent::Exit => shutdown = true,
-                            _ => {},
+                        if let AlacrittyEvent::Exit = event {
+                            shutdown = true
                         };
-
                         let cmd = Command::ProcessBackendCommand(
                             BackendCommand::ProcessAlacrittyEvent(event),
                         );
