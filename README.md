@@ -213,6 +213,6 @@ You can also look at [examples](./examples) directory for more information about
 
 ## Dependencies
 
- - [iced (0.12.0)](https://github.com/iced-rs/iced/tree/master)
- - [alacritty_terminal (0.22.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
- - [tokio (1.36.0)](https://github.com/tokio-rs/tokio)
+ - [iced (0.12)](https://github.com/iced-rs/iced/tree/master)
+ - [alacritty_terminal (0.22)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
+ - [tokio (1.36)](https://github.com/tokio-rs/tokio)
