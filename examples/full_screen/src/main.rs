@@ -1,20 +1,18 @@
 use iced::advanced::graphics::core::Element;
-use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{
-    executor, window, Application, Command, Font, Length, Settings,
+    executor, window, Application, Command, Font, Length, Settings, Size,
     Subscription, Theme,
 };
 
-const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
-    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
-);
-
 fn main() -> iced::Result {
     App::run(Settings {
-        antialiasing: true,
+        antialiasing: false,
         window: window::Settings {
-            size: (1280, 720),
+            size: Size {
+                width: 1280.0,
+                height: 720.0,
+            },
             ..window::Settings::default()
         },
         ..Settings::default()
@@ -24,7 +22,6 @@ fn main() -> iced::Result {
 #[derive(Debug, Clone)]
 pub enum Message {
     IcedTermEvent(iced_term::Event),
-    FontLoaded(Result<(), iced::font::Error>),
 }
 
 struct App {
@@ -45,11 +42,8 @@ impl Application for App {
         let term_settings = iced_term::TermSettings {
             font: iced_term::FontSettings {
                 size: 14.0,
-                font_type: Font {
-                    weight: Weight::Bold,
-                    family: Family::Name("JetBrains Mono"),
-                    ..Font::default()
-                },
+                font_type: Font::default(),
+                ..Default::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
@@ -61,8 +55,7 @@ impl Application for App {
             Self {
                 term: iced_term::Term::new(term_id, term_settings.clone()),
             },
-            Command::batch(vec![iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
-                .map(Message::FontLoaded)]),
+            Command::none(),
         )
     }
 
@@ -72,12 +65,13 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
-            Message::FontLoaded(_) => Command::none(),
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
                 cmd,
             )) => match self.term.update(cmd) {
-                iced_term::actions::Action::Shutdown => window::close(),
+                iced_term::actions::Action::Shutdown => {
+                    window::close(window::Id::MAIN)
+                },
                 _ => Command::none(),
             },
         }
@@ -87,7 +81,7 @@ impl Application for App {
         self.term.subscription().map(Message::IcedTermEvent)
     }
 
-    fn view(&self) -> Element<Message, iced::Renderer> {
+    fn view(&self) -> Element<Message, Theme, iced::Renderer> {
         container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
             .width(Length::Fill)
             .height(Length::Fill)

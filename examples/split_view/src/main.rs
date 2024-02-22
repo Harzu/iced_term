@@ -5,7 +5,7 @@ use iced::widget::pane_grid::{self, PaneGrid};
 use iced::widget::{button, container, responsive, row, text};
 use iced::{alignment, Font};
 use iced::{
-    window, Application, Color, Command, Element, Length, Settings,
+    window, Application, Color, Command, Element, Length, Settings, Size,
     Subscription,
 };
 use iced_term::{term_view, TermView};
@@ -20,7 +20,10 @@ pub fn main() -> iced::Result {
         antialiasing: true,
         default_font: Font::MONOSPACE,
         window: window::Settings {
-            size: (1280, 720),
+            size: Size {
+                width: 1280.0,
+                height: 720.0,
+            },
             ..window::Settings::default()
         },
         ..Settings::default()
@@ -60,9 +63,10 @@ impl Application for Example {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrains Mono"),
-                    monospaced: false,
                     stretch: Stretch::Normal,
+                    ..Default::default()
                 },
+                ..Default::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
@@ -95,11 +99,8 @@ impl Application for Example {
         match message {
             Message::FontLoaded(_) => {},
             Message::Split(axis, pane) => {
-                let result = self.panes.split(
-                    axis,
-                    &pane,
-                    Pane::new(self.panes_created),
-                );
+                let result =
+                    self.panes.split(axis, pane, Pane::new(self.panes_created));
 
                 let tab = iced_term::Term::new(
                     self.panes_created as u64,
@@ -116,7 +117,7 @@ impl Application for Example {
                 return command;
             },
             Message::Clicked(pane) => {
-                let new_focused_pane = self.panes.get(&pane).unwrap();
+                let new_focused_pane = self.panes.get(pane).unwrap();
                 let new_focused_tab =
                     self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
 
@@ -124,20 +125,22 @@ impl Application for Example {
                 return TermView::focus(new_focused_tab.widget_id());
             },
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
-                self.panes.resize(&split, ratio);
+                self.panes.resize(split, ratio);
             },
             Message::Close(pane) => {
-                if let Some((closed_pane, sibling)) = self.panes.close(&pane) {
+                if let Some((closed_pane, sibling)) = self.panes.close(pane) {
                     let tab_id = closed_pane.id as u64;
                     self.tabs.remove(&tab_id);
                     self.focus = Some(sibling);
 
-                    let new_focused_pane = self.panes.get(&sibling).unwrap();
+                    let new_focused_pane = self.panes.get(sibling).unwrap();
                     let new_focused_tab = self
                         .tabs
                         .get_mut(&(new_focused_pane.id as u64))
                         .unwrap();
                     return TermView::focus(new_focused_tab.widget_id());
+                } else {
+                    return window::close(window::Id::MAIN);
                 }
             },
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
@@ -145,7 +148,15 @@ impl Application for Example {
                 cmd,
             )) => {
                 if let Some(tab) = self.tabs.get_mut(&id) {
-                    tab.update(cmd);
+                    match tab.update(cmd) {
+                        iced_term::actions::Action::Shutdown => {
+                            if let Some(current_pane) = self.focus {
+                                return self
+                                    .update(Message::Close(current_pane));
+                            }
+                        },
+                        _ => {},
+                    }
                 }
             },
         }
@@ -293,7 +304,7 @@ fn view_controls<'a>(
 
 mod style {
     use iced::widget::container;
-    use iced::Theme;
+    use iced::{Border, Theme};
 
     pub fn title_bar_active(theme: &Theme) -> container::Appearance {
         let palette = theme.extended_palette();
@@ -320,8 +331,11 @@ mod style {
 
         container::Appearance {
             background: Some(palette.background.weak.color.into()),
-            border_width: 2.0,
-            border_color: palette.background.strong.color,
+            border: Border {
+                width: 2.0,
+                color: palette.background.strong.color,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
@@ -331,8 +345,11 @@ mod style {
 
         container::Appearance {
             background: Some(palette.background.weak.color.into()),
-            border_width: 2.0,
-            border_color: palette.primary.strong.color,
+            border: Border {
+                width: 2.0,
+                color: palette.background.strong.color,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }

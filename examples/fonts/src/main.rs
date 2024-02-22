@@ -2,7 +2,7 @@ use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::{button, column, container, row};
 use iced::{
-    executor, window, Application, Command, Font, Length, Settings,
+    executor, window, Application, Command, Font, Length, Settings, Size,
     Subscription, Theme,
 };
 
@@ -17,7 +17,10 @@ fn main() -> iced::Result {
     App::run(Settings {
         antialiasing: true,
         window: window::Settings {
-            size: (1280, 720),
+            size: Size {
+                width: 1280.0,
+                height: 720.0,
+            },
             ..window::Settings::default()
         },
         ..Settings::default()
@@ -55,9 +58,10 @@ impl Application for App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrains Mono"),
-                    monospaced: false,
                     stretch: Stretch::Normal,
+                    ..Font::default()
                 },
+                ..Default::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
@@ -124,9 +128,11 @@ impl Application for App {
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
                 cmd,
-            )) => {
-                self.term.update(cmd);
-                Command::none()
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => {
+                    window::close(window::Id::MAIN)
+                },
+                _ => Command::none(),
             },
         }
     }
@@ -135,7 +141,7 @@ impl Application for App {
         self.term.subscription().map(Message::IcedTermEvent)
     }
 
-    fn view(&self) -> Element<Message, iced::Renderer> {
+    fn view(&self) -> Element<Message, Theme, iced::Renderer> {
         let content = column![
             row![
                 button("JetBrains").width(Length::Fill).padding(8).on_press(

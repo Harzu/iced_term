@@ -1,10 +1,9 @@
-use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
-use iced::keyboard::{KeyCode, Modifiers};
+use iced::keyboard::Modifiers;
 use iced::widget::container;
 use iced::{
-    executor, window, Application, Command, Font, Length, Settings,
-    Subscription, Theme,
+    executor, window, Application, Command, Element, Font, Length, Settings,
+    Size, Subscription, Theme,
 };
 use iced_term::{
     self,
@@ -20,7 +19,10 @@ fn main() -> iced::Result {
     App::run(Settings {
         antialiasing: true,
         window: window::Settings {
-            size: (1280, 720),
+            size: Size {
+                width: 1280.0,
+                height: 720.0,
+            },
             ..window::Settings::default()
         },
         ..Settings::default()
@@ -54,9 +56,10 @@ impl Application for App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrains Mono"),
-                    monospaced: false,
                     stretch: Stretch::Normal,
+                    ..Default::default()
                 },
+                ..Default::default()
             },
             theme: iced_term::ColorPalette::default(),
             backend: iced_term::BackendSettings {
@@ -67,7 +70,7 @@ impl Application for App {
         let custom_bindings = vec![
             (
                 Binding {
-                    target: InputKind::Char('c'),
+                    target: InputKind::Char(String::from("c")),
                     modifiers: Modifiers::SHIFT,
                     terminal_mode_include: TermMode::ALT_SCREEN,
                     terminal_mode_exclude: TermMode::empty(),
@@ -76,7 +79,7 @@ impl Application for App {
             ),
             (
                 Binding {
-                    target: InputKind::KeyCode(KeyCode::A),
+                    target: InputKind::Char(String::from("a")),
                     modifiers: Modifiers::SHIFT | Modifiers::CTRL,
                     terminal_mode_include: TermMode::empty(),
                     terminal_mode_exclude: TermMode::empty(),
@@ -85,7 +88,7 @@ impl Application for App {
             ),
             (
                 Binding {
-                    target: InputKind::KeyCode(KeyCode::B),
+                    target: InputKind::Char(String::from("b")),
                     modifiers: Modifiers::SHIFT | Modifiers::CTRL,
                     terminal_mode_include: TermMode::empty(),
                     terminal_mode_exclude: TermMode::empty(),
@@ -99,7 +102,7 @@ impl Application for App {
         // You can also use generate_bindings macros
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
-            'l', Modifiers::SHIFT; BindingAction::Char('K');
+            "l", Modifiers::SHIFT; BindingAction::Char('K');
         );
         term.update(iced_term::Command::AddBindings(custom_bindings));
 
@@ -120,9 +123,11 @@ impl Application for App {
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
                 cmd,
-            )) => {
-                self.term.update(cmd);
-                Command::none()
+            )) => match self.term.update(cmd) {
+                iced_term::actions::Action::Shutdown => {
+                    window::close(window::Id::MAIN)
+                },
+                _ => Command::none(),
             },
         }
     }
@@ -131,7 +136,7 @@ impl Application for App {
         self.term.subscription().map(Message::IcedTermEvent)
     }
 
-    fn view(&self) -> Element<Message, iced::Renderer> {
+    fn view(&self) -> Element<Message, Theme, iced::Renderer> {
         container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
             .width(Length::Fill)
             .height(Length::Fill)

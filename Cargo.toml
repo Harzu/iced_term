@@ -5,16 +5,15 @@ members = ["examples/*"]
 name = "iced_term"
 description = "Terminal emulator widget powered by ICED framework and alacritty terminal backend."
 authors = ["Ilya Shvyryalkin <ilyashvy@gmail.com>"]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 repository = "https://github.com/Harzu/iced_term"
 categories = ["gui"]
 license = "MIT"
 
 [dependencies]
-anyhow = "1.0.79"
-alacritty_terminal = "0.21.0"
-iced = { version = "0.10.0", features = [
+alacritty_terminal = "0.22.0"
+iced = { version = "0.12.0", features = [
     "smol",
     "tokio",
     "canvas",
@@ -22,8 +21,8 @@ iced = { version = "0.10.0", features = [
     "lazy",
     "advanced",
 ] }
-tokio = { version = "1.23.0", features = ["full"] }
-iced_graphics = "0.9.0"
-iced_tiny_skia = "0.1.0"
-iced_core = "0.10.0"
+tokio = { version = "1.36.0", features = ["full"] }
+iced_graphics = "0.12.0"
+iced_core = "0.12.0"
 open = "5"
+anyhow = "1.0.79"
