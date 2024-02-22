@@ -24,5 +24,5 @@ iced = { version = "0.12", features = [
 tokio = { version = "1.36", features = ["full"] }
 iced_graphics = "0.12"
 iced_core = "0.12"
-open = "5.0.1"
-anyhow = "1.0.80"
+open = "5"
+anyhow = "1.0"
