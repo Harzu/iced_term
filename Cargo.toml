@@ -12,8 +12,8 @@ categories = ["gui"]
 license = "MIT"
 
 [dependencies]
-alacritty_terminal = "0.22.0"
-iced = { version = "0.12.0", features = [
+alacritty_terminal = "0.22"
+iced = { version = "0.12", features = [
     "smol",
     "tokio",
     "canvas",
@@ -21,8 +21,8 @@ iced = { version = "0.12.0", features = [
     "lazy",
     "advanced",
 ] }
-tokio = { version = "1.36.0", features = ["full"] }
-iced_graphics = "0.12.0"
-iced_core = "0.12.0"
+tokio = { version = "1.36", features = ["full"] }
+iced_graphics = "0.12"
+iced_core = "0.12"
 open = "5"
-anyhow = "1.0.79"
+anyhow = "1.0"
