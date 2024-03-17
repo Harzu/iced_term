@@ -423,8 +423,8 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
             let state = tree.state.downcast_ref::<TermViewState>();
             let content = backend.renderable_content();
             let term_size = content.terminal_size;
-            let cell_width = term_size.cell_width as f64;
-            let cell_height = term_size.cell_height as f64;
+            let cell_width = term_size.cell_width as f32;
+            let cell_height = term_size.cell_height as f32;
             let font_size = self.term.font().size();
             let font_scale_factor = self.term.font().scale_factor();
             let layout_offset_x = layout.position().x;
@@ -433,10 +433,12 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
             let geom =
                 self.term.cache().draw(renderer, viewport.size(), |frame| {
                     for indexed in content.grid.display_iter() {
-                        let x = indexed.point.column.0 as f64 * cell_width;
-                        let y = (indexed.point.line.0 as f64
-                            + content.grid.display_offset() as f64)
-                            * cell_height;
+                        let x = layout_offset_x
+                            + (indexed.point.column.0 as f32 * cell_width);
+                        let y = layout_offset_y
+                            + ((indexed.point.line.0 as f32
+                                + content.grid.display_offset() as f32)
+                                * cell_height);
 
                         let mut fg = self.term.theme().get_color(indexed.fg);
                         let mut bg = self.term.theme().get_color(indexed.bg);
@@ -455,17 +457,11 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                             std::mem::swap(&mut fg, &mut bg);
                         }
 
-                        let cell_size =
-                            Size::new(cell_width as f32, cell_height as f32);
+                        let cell_size = Size::new(cell_width, cell_height);
 
                         // Draw cell background
-                        let background = Path::rectangle(
-                            Point::new(
-                                layout_offset_x + x as f32,
-                                layout_offset_y + y as f32,
-                            ),
-                            cell_size,
-                        );
+                        let background =
+                            Path::rectangle(Point::new(x, y), cell_size);
                         frame.fill(&background, bg);
 
                         // Draw hovered hyperlink underline
@@ -477,17 +473,12 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                                         .contains(&state.mouse_position_on_grid)
                             },
                         ) {
-                            let underline_height = y as f32 + cell_size.height;
+                            let underline_height = y + cell_size.height;
                             let underline = Path::line(
+                                Point::new(x, underline_height),
                                 Point::new(
-                                    layout_offset_x + x as f32,
-                                    layout_offset_y + underline_height,
-                                ),
-                                Point::new(
-                                    layout_offset_x
-                                        + x as f32
-                                        + cell_size.width,
-                                    layout_offset_y + underline_height,
+                                    x + cell_size.width,
+                                    underline_height,
                                 ),
                             );
                             frame.stroke(
@@ -502,13 +493,8 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                         if content.grid.cursor.point == indexed.point {
                             let cursor_color =
                                 self.term.theme().get_color(content.cursor.fg);
-                            let cursor_rect = Path::rectangle(
-                                Point::new(
-                                    layout_offset_x + x as f32,
-                                    layout_offset_y + y as f32,
-                                ),
-                                cell_size,
-                            );
+                            let cursor_rect =
+                                Path::rectangle(Point::new(x, y), cell_size);
                             frame.fill(&cursor_rect, cursor_color);
                         }
 
@@ -524,12 +510,8 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                             let text = Text {
                                 content: indexed.c.to_string(),
                                 position: Point::new(
-                                    layout_offset_x
-                                        + x as f32
-                                        + cell_size.width / 2.0,
-                                    layout_offset_y
-                                        + y as f32
-                                        + cell_size.height / 2.0,
+                                    x + (cell_size.width / 2.0),
+                                    y + (cell_size.height / 2.0),
                                 ),
                                 font: self.term.font().font_type(),
                                 size: iced_core::Pixels(font_size),
@@ -736,7 +718,7 @@ mod tests {
                 SelectionType::Lines,
             ];
 
-            for selection_type in cases {
+            for _selection_type in cases {
                 let mut state = TermViewState::new();
                 state.keyboard_modifiers = Modifiers::SHIFT;
                 let mut commands = Vec::new();
@@ -754,7 +736,7 @@ mod tests {
                     commands[0],
                     Command::ProcessBackendCommand(
                         BackendCommand::SelectStart(
-                            selection_type,
+                            _selection_type,
                             (150.0, 100.0)
                         )
                     ),

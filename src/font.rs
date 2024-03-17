@@ -69,7 +69,7 @@ fn font_measure(
 ) -> Size<f32> {
     let mut paragraph = paragraph::Paragraph::new();
     paragraph.update(Text {
-        content: "A",
+        content: "m",
         font: font_type,
         size: iced_core::Pixels(font_size),
         vertical_alignment: Vertical::Center,
