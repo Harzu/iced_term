@@ -17,7 +17,7 @@ const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
 
 fn main() -> iced::Result {
     App::run(Settings {
-        antialiasing: true,
+        antialiasing: false,
         window: window::Settings {
             size: Size {
                 width: 1280.0,
@@ -55,7 +55,7 @@ impl Application for App {
                 size: 14.0,
                 font_type: Font {
                     weight: Weight::Bold,
-                    family: Family::Name("JetBrains Mono"),
+                    family: Family::Name("JetBrainsMono Nerd Font Mono"),
                     stretch: Stretch::Normal,
                     ..Default::default()
                 },

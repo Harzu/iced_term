@@ -15,7 +15,7 @@ const TERM_FONT_3270_BYTES: &[u8] =
 
 fn main() -> iced::Result {
     App::run(Settings {
-        antialiasing: true,
+        antialiasing: false,
         window: window::Settings {
             size: Size {
                 width: 1280.0,
@@ -57,7 +57,7 @@ impl Application for App {
                 size: 14.0,
                 font_type: Font {
                     weight: Weight::Bold,
-                    family: Family::Name("JetBrains Mono"),
+                    family: Family::Name("JetBrainsMono Nerd Font Mono"),
                     stretch: Stretch::Normal,
                     ..Font::default()
                 },
@@ -93,13 +93,13 @@ impl Application for App {
                 if name.as_str() == "3270" {
                     self.font_setting.font_type = Font {
                         weight: Weight::Normal,
-                        family: Family::Name("IBM 3270"),
+                        family: Family::Name("3270 Nerd Font"),
                         ..Font::default()
                     };
                 } else {
                     self.font_setting.font_type = Font {
                         weight: Weight::Bold,
-                        family: Family::Name("JetBrains Mono"),
+                        family: Family::Name("JetBrainsMono Nerd Font Mono"),
                         ..Font::default()
                     };
                 };

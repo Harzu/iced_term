@@ -1,4 +1,5 @@
 use iced::advanced::graphics::core::Element;
+use iced::font::{Family, Stretch, Weight};
 use iced::widget::container;
 use iced::{
     executor, window, Application, Command, Font, Length, Settings, Size,
@@ -42,7 +43,12 @@ impl Application for App {
         let term_settings = iced_term::TermSettings {
             font: iced_term::FontSettings {
                 size: 14.0,
-                font_type: Font::default(),
+                font_type: Font {
+                    weight: Weight::Bold,
+                    family: Family::Name("JetBrainsMono Nerd Font Mono"),
+                    stretch: Stretch::Normal,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             theme: iced_term::ColorPalette::default(),
