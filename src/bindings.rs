@@ -250,6 +250,53 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
         ArrowDown,  Modifiers::SHIFT; BindingAction::Esc("\x1b[1;2B".into());
         ArrowLeft,  Modifiers::SHIFT; BindingAction::Esc("\x1b[1;2D".into());
         ArrowRight, Modifiers::SHIFT; BindingAction::Esc("\x1b[1;2C".into());
+        "a",        Modifiers::SHIFT; BindingAction::Char('\x41');
+        "b",        Modifiers::SHIFT; BindingAction::Char('\x42');
+        "c",        Modifiers::SHIFT; BindingAction::Char('\x43');
+        "d",        Modifiers::SHIFT; BindingAction::Char('\x44');
+        "e",        Modifiers::SHIFT; BindingAction::Char('\x45'); // ENQ               vt100
+        "f",        Modifiers::SHIFT; BindingAction::Char('\x46');
+        "g",        Modifiers::SHIFT; BindingAction::Char('\x47'); // Bell              vt100
+        "h",        Modifiers::SHIFT; BindingAction::Char('\x48'); // Backspace         vt100
+        "i",        Modifiers::SHIFT; BindingAction::Char('\x49'); // Tab               vt100
+        "j",        Modifiers::SHIFT; BindingAction::Char('\x4a'); // LF (new line)     vt100
+        "k",        Modifiers::SHIFT; BindingAction::Char('\x4b'); // VT (vertical tab) vt100
+        "l",        Modifiers::SHIFT; BindingAction::Char('\x4c'); // FF (new page)     vt100
+        "m",        Modifiers::SHIFT; BindingAction::Char('\x4d'); // CR                vt100
+        "n",        Modifiers::SHIFT; BindingAction::Char('\x4e'); // SO (shift out)    vt100
+        "o",        Modifiers::SHIFT; BindingAction::Char('\x4f'); // SI (shift in)     vt100
+        "p",        Modifiers::SHIFT; BindingAction::Char('\x50');
+        "q",        Modifiers::SHIFT; BindingAction::Char('\x51');
+        "r",        Modifiers::SHIFT; BindingAction::Char('\x52');
+        "s",        Modifiers::SHIFT; BindingAction::Char('\x53');
+        "t",        Modifiers::SHIFT; BindingAction::Char('\x54');
+        "u",        Modifiers::SHIFT; BindingAction::Char('\x55');
+        "v",        Modifiers::SHIFT; BindingAction::Char('\x56');
+        "w",        Modifiers::SHIFT; BindingAction::Char('\x57');
+        "x",        Modifiers::SHIFT; BindingAction::Char('\x58');
+        "y",        Modifiers::SHIFT; BindingAction::Char('\x59');
+        "z",        Modifiers::SHIFT; BindingAction::Char('\x5a');
+        "`",        Modifiers::SHIFT; BindingAction::Char('\x7e');
+        "1",        Modifiers::SHIFT; BindingAction::Char('\x21');
+        "2",        Modifiers::SHIFT; BindingAction::Char('\x40');
+        "3",        Modifiers::SHIFT; BindingAction::Char('\x23');
+        "4",        Modifiers::SHIFT; BindingAction::Char('\x24');
+        "5",        Modifiers::SHIFT; BindingAction::Char('\x25');
+        "6",        Modifiers::SHIFT; BindingAction::Char('\x5e');
+        "7",        Modifiers::SHIFT; BindingAction::Char('\x26');
+        "8",        Modifiers::SHIFT; BindingAction::Char('\x2a');
+        "9",        Modifiers::SHIFT; BindingAction::Char('\x28');
+        "0",        Modifiers::SHIFT; BindingAction::Char('\x29');
+        "-",        Modifiers::SHIFT; BindingAction::Char('\x5f');
+        "=",        Modifiers::SHIFT; BindingAction::Char('\x2b');
+        "\\",        Modifiers::SHIFT; BindingAction::Char('\x7c');
+        "[",        Modifiers::SHIFT; BindingAction::Char('\x7b');
+        "]",        Modifiers::SHIFT; BindingAction::Char('\x7d');
+        ";",        Modifiers::SHIFT; BindingAction::Char('\x3a');
+        "\'",        Modifiers::SHIFT; BindingAction::Char('\x22');
+        ",",        Modifiers::SHIFT; BindingAction::Char('\x3c');
+        ".",        Modifiers::SHIFT; BindingAction::Char('\x3e');
+        "/",        Modifiers::SHIFT; BindingAction::Char('\x3f');
         // ALT
         Backspace,  Modifiers::ALT; BindingAction::Esc("\x1b\x7f".into());
         End,        Modifiers::ALT; BindingAction::Esc("\x1b[1;3F".into());
