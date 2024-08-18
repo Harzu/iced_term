@@ -214,5 +214,5 @@ You can also look at [examples](./examples) directory for more information about
 ## Dependencies
 
  - [iced (0.12)](https://github.com/iced-rs/iced/tree/master)
- - [alacritty_terminal (0.22)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
+ - [alacritty_terminal (custom commit)](https://github.com/zed-industries/zed/pull/12687/files)
  - [tokio (1.36)](https://github.com/tokio-rs/tokio)
