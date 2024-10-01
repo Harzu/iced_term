@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use crate::actions::Action;
 use crate::backend::BackendCommand;
 use crate::backend::{settings::BackendSettings, Backend};
@@ -6,7 +8,8 @@ use crate::font::TermFont;
 use crate::theme::TermTheme;
 use crate::{ColorPalette, FontSettings};
 use alacritty_terminal::event::Event as AlacrittyEvent;
-use iced::futures::SinkExt;
+use iced::advanced::subscription;
+use iced::futures::{SinkExt, Stream};
 use iced::widget::canvas::Cache;
 use iced::Subscription;
 use tokio::sync::mpsc::{self, Sender};
@@ -77,6 +80,68 @@ impl ViewProxy for Term {
     }
 }
 
+pub struct  TermSubscription {
+    id: u64
+}
+
+impl TermSubscription {
+    pub fn new(id: u64) -> Self {
+        Self { id }
+    }
+
+    pub fn event_stream(&self) -> impl Stream<Item = Event> {
+        let id = self.id;
+        iced::stream::channel(100, move |mut output| async move {
+            let (event_tx, mut event_rx) = mpsc::channel(100);
+            let cmd = Command::InitBackend(event_tx);
+            output
+                .send(Event::CommandReceived(id, cmd))
+                .await
+                .unwrap_or_else(|_| {
+                    panic!("iced_term stream {}: sending BackendEventSenderReceived event is failed", id)
+                });
+
+            let mut shutdown = false;
+            loop {
+                match event_rx.recv().await {
+                    Some(event) => {
+                        if let AlacrittyEvent::Exit = event {
+                            shutdown = true
+                        };
+                        let cmd = Command::ProcessBackendCommand(
+                            BackendCommand::ProcessAlacrittyEvent(event),
+                        );
+                        output
+                            .send(Event::CommandReceived(id, cmd))
+                            .await
+                            .unwrap_or_else(|_| {
+                                panic!("iced_term stream {}: sending BackendEventReceived event is failed", id)
+                            });
+                    },
+                    None => {
+                        if !shutdown {
+                            panic!("iced_term stream {}: terminal event channel closed unexpected", id);
+                        }
+                    },
+                }
+            }
+        })
+    }
+}
+
+impl subscription::Recipe for TermSubscription
+{
+    type Output = Event;
+
+    fn hash(&self, state: &mut subscription::Hasher) {
+        self.id.hash(state);
+    }
+
+    fn stream(self: Box<Self>, _: subscription::EventStream) -> iced_graphics::futures::BoxStream<Self::Output> {
+        Box::pin(self.event_stream())
+    }
+}
+
 impl Term {
     pub fn new(id: u64, settings: TermSettings) -> Self {
         Self {
@@ -94,44 +159,44 @@ impl Term {
         iced::widget::text_input::Id::new(self.id.to_string())
     }
 
-    pub fn subscription(&self) -> Subscription<Event> {
-        let id = self.id;
-        iced::subscription::channel(id, 100, move |mut output| async move {
-            let (event_tx, mut event_rx) = mpsc::channel(100);
-            let cmd = Command::InitBackend(event_tx);
-            output
-                .send(Event::CommandReceived(id, cmd))
-                .await
-                .unwrap_or_else(|_| {
-                    panic!("iced_term subscription {}: sending BackendEventSenderReceived event is failed", id)
-                });
+    // pub fn event_stream(id: u64) -> impl Stream<Item = Event> {
+    //     // let id = self.id;
+    //     iced::stream::channel(100, move |mut output| async move {
+    //         let (event_tx, mut event_rx) = mpsc::channel(100);
+    //         let cmd = Command::InitBackend(event_tx);
+    //         output
+    //             .send(Event::CommandReceived(id, cmd))
+    //             .await
+    //             .unwrap_or_else(|_| {
+    //                 panic!("iced_term stream {}: sending BackendEventSenderReceived event is failed", id)
+    //             });
 
-            let mut shutdown = false;
-            loop {
-                match event_rx.recv().await {
-                    Some(event) => {
-                        if let AlacrittyEvent::Exit = event {
-                            shutdown = true
-                        };
-                        let cmd = Command::ProcessBackendCommand(
-                            BackendCommand::ProcessAlacrittyEvent(event),
-                        );
-                        output
-                            .send(Event::CommandReceived(id, cmd))
-                            .await
-                            .unwrap_or_else(|_| {
-                                panic!("iced_term subscription {}: sending BackendEventReceived event is failed", id)
-                            });
-                    },
-                    None => {
-                        if !shutdown {
-                            panic!("iced_term subscription {}: terminal event channel closed unexpected", id);
-                        }
-                    },
-                }
-            }
-        })
-    }
+    //         let mut shutdown = false;
+    //         loop {
+    //             match event_rx.recv().await {
+    //                 Some(event) => {
+    //                     if let AlacrittyEvent::Exit = event {
+    //                         shutdown = true
+    //                     };
+    //                     let cmd = Command::ProcessBackendCommand(
+    //                         BackendCommand::ProcessAlacrittyEvent(event),
+    //                     );
+    //                     output
+    //                         .send(Event::CommandReceived(id, cmd))
+    //                         .await
+    //                         .unwrap_or_else(|_| {
+    //                             panic!("iced_term stream {}: sending BackendEventReceived event is failed", id)
+    //                         });
+    //                 },
+    //                 None => {
+    //                     if !shutdown {
+    //                         panic!("iced_term stream {}: terminal event channel closed unexpected", id);
+    //                     }
+    //                 },
+    //             }
+    //         }
+    //     })
+    // }
 
     pub fn update(&mut self, cmd: Command) -> Action {
         let mut action = Action::Ignore;

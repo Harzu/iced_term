@@ -13,7 +13,7 @@ license = "MIT"
 
 [dependencies]
 alacritty_terminal = { git = "https://github.com/alacritty/alacritty", rev = "cacdb5bb3b72bad2c729227537979d95af75978f" }
-iced = { version = "0.12", features = [
+iced = { version = "0.13.1", features = [
     "smol",
     "tokio",
     "canvas",
@@ -22,7 +22,7 @@ iced = { version = "0.12", features = [
     "advanced",
 ] }
 tokio = { version = "1.36", features = ["full"] }
-iced_graphics = "0.12"
-iced_core = "0.12"
-open = "5"
-anyhow = "1.0"
+iced_graphics = "0.13.0"
+iced_core = "0.13.2"
+open = "5.3.0"
+anyhow = "1.0.89"

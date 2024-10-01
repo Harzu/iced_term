@@ -68,16 +68,16 @@ fn font_measure(
     font_type: Font,
 ) -> Size<f32> {
     let mut paragraph = paragraph::Paragraph::new();
-    paragraph.update(Text {
-        content: "m",
-        font: font_type,
-        size: iced_core::Pixels(font_size),
-        vertical_alignment: Vertical::Center,
-        horizontal_alignment: Horizontal::Center,
-        shaping: TextShaping::Advanced,
-        line_height: LineHeight::Relative(scale_factor),
-        bounds: Size::INFINITY,
-    });
+    // paragraph.update(Text {
+    //     content: "m",
+    //     font: font_type,
+    //     size: iced_core::Pixels(font_size),
+    //     vertical_alignment: Vertical::Center,
+    //     horizontal_alignment: Horizontal::Center,
+    //     shaping: TextShaping::Advanced,
+    //     line_height: LineHeight::Relative(scale_factor),
+    //     bounds: Size::INFINITY,
+    // });
 
     paragraph.min_bounds()
 }

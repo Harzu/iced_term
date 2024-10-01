@@ -1,23 +1,18 @@
 use iced::advanced::graphics::core::Element;
+use iced::advanced::subscription;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::container;
 use iced::{
-    executor, window, Application, Command, Font, Length, Settings, Size,
-    Subscription, Theme,
+    window, Font, Length, Size, Subscription, Task, Theme
 };
+use iced_term::ViewProxy;
 
 fn main() -> iced::Result {
-    App::run(Settings {
-        antialiasing: false,
-        window: window::Settings {
-            size: Size {
-                width: 1280.0,
-                height: 720.0,
-            },
-            ..window::Settings::default()
-        },
-        ..Settings::default()
-    })
+    iced::application("full_screen", App::update, App::view)
+        .antialiasing(false)
+        .window_size(Size { width: 1280.0, height: 720.0 })
+        .subscription(App::subscription)
+        .run_with(App::new)
 }
 
 #[derive(Debug, Clone)]
@@ -29,13 +24,8 @@ struct App {
     term: iced_term::Term,
 }
 
-impl Application for App {
-    type Executor = executor::Default;
-    type Message = Message;
-    type Theme = Theme;
-    type Flags = ();
-
-    fn new(_flags: ()) -> (Self, Command<Message>) {
+impl App {
+    fn new() -> (Self, Task<Message>) {
         let system_shell = std::env::var("SHELL")
             .expect("SHELL variable is not defined")
             .to_string();
@@ -61,7 +51,7 @@ impl Application for App {
             Self {
                 term: iced_term::Term::new(term_id, term_settings.clone()),
             },
-            Command::none(),
+            Task::none(),
         )
     }
 
@@ -69,22 +59,24 @@ impl Application for App {
         String::from("Terminal app")
     }
 
-    fn update(&mut self, message: Self::Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Task<Message> {
+        println!("{:?}", message);
         match message {
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
                 cmd,
             )) => match self.term.update(cmd) {
                 iced_term::actions::Action::Shutdown => {
-                    window::close(window::Id::MAIN)
+                    window::get_latest().and_then(window::close)
                 },
-                _ => Command::none(),
+                _ => Task::none(),
             },
         }
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        self.term.subscription().map(Message::IcedTermEvent)
+        let term_subscription = iced_term::TermSubscription::new(self.term.id());
+        subscription::from_recipe(term_subscription).map(Message::IcedTermEvent)
     }
 
     fn view(&self) -> Element<Message, Theme, iced::Renderer> {

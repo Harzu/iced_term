@@ -205,25 +205,25 @@ impl TermTheme {
     }
 }
 
-impl container::StyleSheet for TermTheme {
-    type Style = Theme;
+// impl container::StyleSheet for TermTheme {
+//     type Style = Theme;
 
-    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            background: Some(
-                hex_to_color(&self.palette.background)
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "invalid background color {}",
-                            self.palette.background
-                        )
-                    })
-                    .into(),
-            ),
-            ..container::Appearance::default()
-        }
-    }
-}
+//     fn appearance(&self, _style: &Self::Style) -> container::Appearance {
+//         container::Appearance {
+//             background: Some(
+//                 hex_to_color(&self.palette.background)
+//                     .unwrap_or_else(|_| {
+//                         panic!(
+//                             "invalid background color {}",
+//                             self.palette.background
+//                         )
+//                     })
+//                     .into(),
+//             ),
+//             ..container::Appearance::default()
+//         }
+//     }
+// }
 
 fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
     if hex.len() != 7 {

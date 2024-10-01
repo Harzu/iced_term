@@ -20,7 +20,7 @@ use iced_core::text::{LineHeight, Shaping};
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
-use iced_graphics::geometry::{Renderer, Stroke};
+use iced_graphics::geometry::Stroke;
 
 pub struct TermView<'a> {
     term: &'a Term,
@@ -30,9 +30,7 @@ pub fn term_view(term: &Term) -> Element<'_, Event> {
     container(TermView::new(term))
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(iced::theme::Container::Custom(Box::new(
-            term.theme().clone(),
-        )))
+        // .style(iced::theme)
         .into()
 }
 
@@ -43,7 +41,7 @@ impl<'a> TermView<'a> {
 
     pub fn focus<Message: 'static>(
         id: iced::widget::text_input::Id,
-    ) -> iced::Command<Message> {
+    ) -> iced::Task<Message> {
         iced::widget::text_input::focus(id)
     }
 
@@ -152,7 +150,7 @@ impl<'a> TermView<'a> {
                 true,
             ))
         } else {
-            let current_click = Click::new(cursor_position, state.last_click);
+            let current_click = Click::new(cursor_position, mouse::Button::Left, state.last_click);
             let selection_type = match current_click.kind() {
                 mouse::click::Kind::Single => SelectionType::Simple,
                 mouse::click::Kind::Double => SelectionType::Semantic,
@@ -306,9 +304,8 @@ impl<'a> TermView<'a> {
                 },
                 iced::keyboard::Event::KeyPressed {
                     key,
-                    location: _,
                     modifiers,
-                    text: _,
+                    ..
                 } => match key {
                     Key::Character(c) => {
                         binding_action = self.term.bindings().get_action(
@@ -402,11 +399,11 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         tree: &mut Tree,
         _layout: iced_core::Layout<'_>,
         _renderer: &iced::Renderer,
-        operation: &mut dyn operation::Operation<Event>,
+        operation: &mut dyn operation::Operation,
     ) {
         let state = tree.state.downcast_mut::<TermViewState>();
         let wid = iced_core::widget::Id::from(self.term.widget_id());
-        operation.focusable(state, Some(&wid));
+        operation.focusable(state, Some(&wid));   
     }
 
     fn draw(
@@ -528,7 +525,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                     }
                 });
 
-            renderer.draw(vec![geom]);
+            // renderer.draw(vec![geom]);
         }
     }
 
