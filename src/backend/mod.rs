@@ -1,5 +1,4 @@
-pub mod settings;
-
+// pub mod settings;
 use alacritty_terminal::event::{
     Event, EventListener, Notify, OnResize, WindowSize,
 };
@@ -14,14 +13,13 @@ use alacritty_terminal::term::{
 };
 use alacritty_terminal::{tty, Grid};
 use iced_core::Size;
-use settings::BackendSettings;
 use std::borrow::Cow;
 use std::cmp::min;
 use std::io::Result;
 use std::ops::{Index, RangeInclusive};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-
+use crate::settings::BackendSettings;
 use crate::actions::Action;
 
 #[derive(Debug, Clone)]

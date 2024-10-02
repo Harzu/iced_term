@@ -1,6 +1,7 @@
 use alacritty_terminal::vte::ansi::{self, NamedColor};
-use iced::{widget::container, Color, Theme};
+use iced::Color;
 use std::collections::HashMap;
+use crate::settings::ThemeSettings;
 
 #[derive(Debug, Clone)]
 pub struct ColorPalette {
@@ -70,25 +71,25 @@ impl Default for ColorPalette {
 }
 
 #[derive(Debug, Clone)]
-pub struct TermTheme {
+pub struct Theme {
     palette: Box<ColorPalette>,
     ansi256_colors: HashMap<u8, Color>,
 }
 
-impl Default for TermTheme {
+impl Default for Theme {
     fn default() -> Self {
         Self {
             palette: Box::<ColorPalette>::default(),
-            ansi256_colors: TermTheme::get_ansi256_colors(),
+            ansi256_colors: Theme::get_ansi256_colors(),
         }
     }
 }
 
-impl TermTheme {
-    pub fn new(palette: Box<ColorPalette>) -> Self {
+impl Theme {
+    pub fn new(settings: ThemeSettings) -> Self {
         Self {
-            palette,
-            ansi256_colors: TermTheme::get_ansi256_colors(),
+            palette: settings.color_pallete,
+            ansi256_colors: Theme::get_ansi256_colors(),
         }
     }
 
@@ -239,8 +240,7 @@ fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
 
 #[cfg(test)]
 mod tests {
-    use super::hex_to_color;
-    use crate::TermTheme;
+    use super::*;
     use alacritty_terminal::vte::ansi;
     use std::collections::HashMap;
 
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn get_basic_indexed_colors() {
-        let default_theme = TermTheme::default();
+        let default_theme = Theme::default();
         let basic_indexed_colors_map: HashMap<u8, String> = HashMap::from([
             (0, default_theme.palette.black.clone()),
             (1, default_theme.palette.red.clone()),

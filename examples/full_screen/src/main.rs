@@ -1,11 +1,9 @@
 use iced::advanced::graphics::core::Element;
-use iced::advanced::subscription;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::container;
 use iced::{
     window, Font, Length, Size, Subscription, Task, Theme
 };
-use iced_term::ViewProxy;
 
 fn main() -> iced::Result {
     iced::application("full_screen", App::update, App::view)
@@ -21,7 +19,7 @@ pub enum Message {
 }
 
 struct App {
-    term: iced_term::Term,
+    term: iced_term::Terminal,
 }
 
 impl App {
@@ -30,8 +28,8 @@ impl App {
             .expect("SHELL variable is not defined")
             .to_string();
         let term_id = 0;
-        let term_settings = iced_term::TermSettings {
-            font: iced_term::FontSettings {
+        let term_settings = iced_term::settings::Settings {
+            font: iced_term::settings::FontSettings {
                 size: 14.0,
                 font_type: Font {
                     weight: Weight::Bold,
@@ -41,26 +39,21 @@ impl App {
                 },
                 ..Default::default()
             },
-            theme: iced_term::ColorPalette::default(),
-            backend: iced_term::BackendSettings {
+            theme: iced_term::settings::ThemeSettings::default(),
+            backend: iced_term::settings::BackendSettings {
                 shell: system_shell.to_string(),
             },
         };
 
         (
             Self {
-                term: iced_term::Term::new(term_id, term_settings.clone()),
+                term: iced_term::Terminal::new(term_id, term_settings.clone()),
             },
             Task::none(),
         )
     }
 
-    fn title(&self) -> String {
-        String::from("Terminal app")
-    }
-
     fn update(&mut self, message: Message) -> Task<Message> {
-        println!("{:?}", message);
         match message {
             Message::IcedTermEvent(iced_term::Event::CommandReceived(
                 _,
@@ -75,8 +68,9 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let term_subscription = iced_term::TermSubscription::new(self.term.id());
-        subscription::from_recipe(term_subscription).map(Message::IcedTermEvent)
+        let term_subscription = iced_term::TerminalSubscription::new(self.term.term_id());
+        let term_event_stream = term_subscription.event_stream();
+        Subscription::run_with_id(self.term.term_id(), term_event_stream).map(Message::IcedTermEvent)
     }
 
     fn view(&self) -> Element<Message, Theme, iced::Renderer> {

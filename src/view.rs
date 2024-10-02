@@ -3,8 +3,7 @@ use crate::backend::{
     RenderableContent,
 };
 use crate::bindings::{BindingAction, BindingsLayout, InputKind};
-use crate::term::{Event, Term, ViewProxy};
-use crate::Command;
+use crate::terminal::{Event, Command, Terminal, ViewProxy};
 use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
@@ -23,10 +22,10 @@ use iced_graphics::core::Widget;
 use iced_graphics::geometry::Stroke;
 
 pub struct TermView<'a> {
-    term: &'a Term,
+    term: &'a Terminal,
 }
 
-pub fn term_view(term: &Term) -> Element<'_, Event> {
+pub fn term_view(term: &Terminal) -> Element<'_, Event> {
     container(TermView::new(term))
         .width(Length::Fill)
         .height(Length::Fill)
@@ -35,7 +34,7 @@ pub fn term_view(term: &Term) -> Element<'_, Event> {
 }
 
 impl<'a> TermView<'a> {
-    fn new(term: &'a Term) -> Self {
+    fn new(term: &'a Terminal) -> Self {
         Self { term }
     }
 
@@ -525,7 +524,8 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                     }
                 });
 
-            // renderer.draw(vec![geom]);
+            use iced::advanced::graphics::geometry::Renderer as _;
+            renderer.draw_geometry(geom);
         }
     }
 
@@ -1045,7 +1045,7 @@ mod tests {
     mod handle_wheel_scrolled_tests {
         use super::*;
         use crate::font::TermFont;
-        use crate::FontSettings;
+        use crate::settings::FontSettings;
 
         #[test]
         fn scroll_with_lines_downward() {

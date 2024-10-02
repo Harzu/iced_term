@@ -5,23 +5,7 @@ use iced_core::{
     Text,
 };
 use iced_graphics::text::paragraph;
-
-#[derive(Debug, Clone)]
-pub struct FontSettings {
-    pub size: f32,
-    pub scale_factor: f32,
-    pub font_type: Font,
-}
-
-impl Default for FontSettings {
-    fn default() -> Self {
-        Self {
-            size: 14.0,
-            scale_factor: 1.3,
-            font_type: Font::MONOSPACE,
-        }
-    }
-}
+use crate::settings::FontSettings;
 
 #[derive(Debug, Clone)]
 pub struct TermFont {
@@ -67,17 +51,17 @@ fn font_measure(
     scale_factor: f32,
     font_type: Font,
 ) -> Size<f32> {
-    let mut paragraph = paragraph::Paragraph::new();
-    // paragraph.update(Text {
-    //     content: "m",
-    //     font: font_type,
-    //     size: iced_core::Pixels(font_size),
-    //     vertical_alignment: Vertical::Center,
-    //     horizontal_alignment: Horizontal::Center,
-    //     shaping: TextShaping::Advanced,
-    //     line_height: LineHeight::Relative(scale_factor),
-    //     bounds: Size::INFINITY,
-    // });
+    let paragraph = paragraph::Paragraph::with_text(Text {
+        content: "m",
+        font: font_type,
+        size: iced_core::Pixels(font_size),
+        vertical_alignment: Vertical::Center,
+        horizontal_alignment: Horizontal::Center,
+        shaping: TextShaping::Advanced,
+        line_height: LineHeight::Relative(scale_factor),
+        bounds: Size::INFINITY,
+        wrapping: iced_core::text::Wrapping::Glyph,
+    });
 
     paragraph.min_bounds()
 }
