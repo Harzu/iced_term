@@ -26,6 +26,7 @@ The widget is currently under development and does not provide full terminal fea
 - PTY content rendering
 - Multiple instance support
 - Basic keyboard input
+- Mouse interaction in different modes
 - Adding custom keyboard or mouse bindings
 - Resizing
 - Scrolling
@@ -38,10 +39,17 @@ This widget tested on MacOS and Linux and is not tested on Windows.
 
 ## Installation
 
+From crates.io
+
 ```toml
-iced_term = "0.4.0"
+iced_term = "0.5.0"
 ```
 
+From git
+
+```toml
+iced_term = { git = "https://github.com/Harzu/iced_term", branch = "master" }
+```
 ## Overview
 
 Interacting with the widget is happened via:
@@ -82,87 +90,82 @@ pub enum Action {
 }
 ```
 
-For creating workable widget instance you need to do a few steps:
+For creating workable application example with this widget you need to do a several things
 
-Add widget to your app struct
+**Step 1.** Add widget to your `App` struct
 
 ```rust
 struct App {
-    term: iced_term::Term,
+    title: String,
+    term: iced_term::Terminal,
 }
 ```
 
-Create pure instance in app constructor
+**Step 2.** Create instance in `App` constructor
 
 ```rust
-impl Application for App {
-    type Executor = executor::Default;
-    type Message = Message;
-    type Theme = Theme;
-    type Flags = ();
-
-    fn new(_flags: ()) -> (Self, Command<Message>) {
+impl App {
+    fn new() -> (Self, Task<Event>) {
         let system_shell = std::env::var("SHELL")
             .expect("SHELL variable is not defined")
             .to_string();
         let term_id = 0;
-        let term_settings = iced_term::TermSettings {
-            font: iced_term::FontSettings {
-                size: 14.0,
-                ..iced_term::FontSettings::default()
-            },
-            theme: iced_term::ColorPalette::default(),
-            backend: iced_term::BackendSettings {
+        let term_settings = iced_term::settings::Settings {
+            backend: iced_term::settings::BackendSettings {
                 shell: system_shell.to_string(),
             },
+            ..Default::default()
         };
 
         (
             Self {
-                term: iced_term::Term::new(term_id, term_settings.clone()),
+                title: String::from("Terminal app"),
+                term: iced_term::Terminal::new(term_id, term_settings),
             },
-            Command::none(),
+            Task::none(),
         )
     }
 }
 ```
 
-Add message that contained widget events to application message enum
+**Step 3.** Add event kind to **Events/Messages** enum that will be container of internal widget events for application's **Events/Messages**. You will have to wrap inner widget events via `.map(Event::Terminal)` where it's necessary. 
 
 ```rust
 #[derive(Debug, Clone)]
-pub enum Message {
-    // ... other messages
-    IcedTermEvent(iced_term::Event),
+pub enum Event {
+    // ... other events
+    Terminal(iced_term::Event),
 }
 ```
 
-Add **IcedTermEvent** processing to application `update` method
+**Step 4.** Add **Terminal** event kind processing to application `update` method.
 
 ```rust
-impl Application for App {
+impl App {
     // ... other methods
-    fn update(&mut self, message: Self::Message) -> Command<Message> {
-        match message {
-            Message::IcedTermEvent(iced_term::Event::CommandReceived(
+    fn update(&mut self, event: Event) -> Task<Event> {
+        match event {
+            Event::Terminal(iced_term::Event::CommandReceived(
                 _,
                 cmd,
             )) => match self.term.update(cmd) {
-                iced_term::actions::Action::Shutdown => window::close(),
-                _ => Command::none(),
+                iced_term::actions::Action::Shutdown => {
+                    window::get_latest().and_then(window::close)
+                },
+                _ => Task::none(),
             },
         }
     }
 }
 ```
 
-Add view to your application
+**Step 5.** Add view to your application
 
 ```rust
-impl Application for App {
+impl App {
     // ... other methods
-    fn view(&self) -> Element<Message, iced::Renderer> {
-        container(iced_term::term_view(&self.term).map(Message::IcedTermEvent))
+    fn view(&self) -> Element<Event, Theme, iced::Renderer> {
+        container(iced_term::term_view(&self.term).map(Event::Terminal))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -170,36 +173,42 @@ impl Application for App {
 }
 ```
 
-Activate backend events subscription in your app
+**Step 6.** Add event subscription for getting internal events from backend (pty).
 
 ```rust
-impl Application for App {
+impl App {
     // ... other methods
-    fn subscription(&self) -> Subscription<Message> {
-        self.term.subscription().map(Message::IcedTermEvent)
+    fn subscription(&self) -> Subscription<Event> {
+        let term_subscription = iced_term::Subscription::new(self.term.id);
+        let term_event_stream = term_subscription.event_stream();
+        Subscription::run_with_id(self.term.id, term_event_stream)
+            .map(Event::Terminal)
     }
 }
 ```
 
-Make main func
+**Step 7.** Add main function
 
 ```rust
 fn main() -> iced::Result {
-    App::run(Settings {
-        window: window::Settings {
-            size: (1280, 720),
-            ..window::Settings::default()
-        },
-        ..Settings::default()
-    })
+    iced::application(App::title, App::update, App::view)
+        .antialiasing(false)
+        .window_size(Size {
+            width: 1280.0,
+            height: 720.0,
+        })
+        .subscription(App::subscription)
+        .run_with(App::new)
 }
 ```
 
-Run your application
+**Step 8.** Run your application
 
 ```shell
 cargo run --release
 ```
+
+**Step 9.** To be happy
 
 ## Examples
 
@@ -213,6 +222,6 @@ You can also look at [examples](./examples) directory for more information about
 
 ## Dependencies
 
- - [iced (0.12)](https://github.com/iced-rs/iced/tree/master)
+ - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
  - [alacritty_terminal (custom commit)](https://github.com/zed-industries/zed/pull/12687/files)
- - [tokio (1.36)](https://github.com/tokio-rs/tokio)
+ - [tokio (1.40.0)](https://github.com/tokio-rs/tokio)

@@ -1,7 +1,7 @@
-use alacritty_terminal::vte::ansi::{self, NamedColor};
-use iced::Color;
-use std::collections::HashMap;
 use crate::settings::ThemeSettings;
+use alacritty_terminal::vte::ansi::{self, NamedColor};
+use iced::{widget::container, Color};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct ColorPalette {
@@ -93,32 +93,20 @@ impl Theme {
         }
     }
 
-    fn get_ansi256_colors() -> HashMap<u8, Color> {
-        let mut ansi256_colors = HashMap::new();
-
-        for r in 0..6 {
-            for g in 0..6 {
-                for b in 0..6 {
-                    // Reserve the first 16 colors for config.
-                    let index = 16 + r * 36 + g * 6 + b;
-                    let color = Color::from_rgb8(
-                        if r == 0 { 0 } else { r * 40 + 55 },
-                        if g == 0 { 0 } else { g * 40 + 55 },
-                        if b == 0 { 0 } else { b * 40 + 55 },
-                    );
-                    ansi256_colors.insert(index, color);
-                }
-            }
+    pub(crate) fn container_style(&self) -> container::Style {
+        container::Style {
+            background: Some(
+                hex_to_color(&self.palette.background)
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "invalid background color {}",
+                            self.palette.background
+                        )
+                    })
+                    .into(),
+            ),
+            ..container::Style::default()
         }
-
-        let index: u8 = 232;
-        for i in 0..24 {
-            let value = i * 10 + 8;
-            ansi256_colors
-                .insert(index + i, Color::from_rgb8(value, value, value));
-        }
-
-        ansi256_colors
     }
 
     pub fn get_color(&self, c: ansi::Color) -> Color {
@@ -204,27 +192,35 @@ impl Theme {
             },
         }
     }
+
+    fn get_ansi256_colors() -> HashMap<u8, Color> {
+        let mut ansi256_colors = HashMap::new();
+
+        for r in 0..6 {
+            for g in 0..6 {
+                for b in 0..6 {
+                    // Reserve the first 16 colors for config.
+                    let index = 16 + r * 36 + g * 6 + b;
+                    let color = Color::from_rgb8(
+                        if r == 0 { 0 } else { r * 40 + 55 },
+                        if g == 0 { 0 } else { g * 40 + 55 },
+                        if b == 0 { 0 } else { b * 40 + 55 },
+                    );
+                    ansi256_colors.insert(index, color);
+                }
+            }
+        }
+
+        let index: u8 = 232;
+        for i in 0..24 {
+            let value = i * 10 + 8;
+            ansi256_colors
+                .insert(index + i, Color::from_rgb8(value, value, value));
+        }
+
+        ansi256_colors
+    }
 }
-
-// impl container::StyleSheet for TermTheme {
-//     type Style = Theme;
-
-//     fn appearance(&self, _style: &Self::Style) -> container::Appearance {
-//         container::Appearance {
-//             background: Some(
-//                 hex_to_color(&self.palette.background)
-//                     .unwrap_or_else(|_| {
-//                         panic!(
-//                             "invalid background color {}",
-//                             self.palette.background
-//                         )
-//                     })
-//                     .into(),
-//             ),
-//             ..container::Appearance::default()
-//         }
-//     }
-// }
 
 fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
     if hex.len() != 7 {

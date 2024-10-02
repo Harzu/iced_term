@@ -1,15 +1,15 @@
-use std::hash::Hash;
-use iced_graphics::futures::subscription;
-use tokio::sync::mpsc;
-use iced::futures::{SinkExt, Stream};
+use crate::{backend::BackendCommand, Command, Event};
 use alacritty_terminal::event::Event as AlacrittyEvent;
-use crate::{Event, Command, backend::BackendCommand};
+use iced::futures::{SinkExt, Stream};
+use iced_graphics::futures::subscription;
+use std::hash::Hash;
+use tokio::sync::mpsc;
 
-pub struct  TerminalSubscription {
-    term_id: u64
+pub struct Subscription {
+    term_id: u64,
 }
 
-impl TerminalSubscription {
+impl Subscription {
     pub fn new(term_id: u64) -> Self {
         Self { term_id }
     }
@@ -55,7 +55,7 @@ impl TerminalSubscription {
     }
 }
 
-impl subscription::Recipe for TerminalSubscription {
+impl subscription::Recipe for Subscription {
     type Output = Event;
 
     fn hash(&self, state: &mut subscription::Hasher) {
@@ -64,7 +64,7 @@ impl subscription::Recipe for TerminalSubscription {
 
     fn stream(
         self: Box<Self>,
-        _: subscription::EventStream
+        _: subscription::EventStream,
     ) -> iced_graphics::futures::BoxStream<Self::Output> {
         Box::pin(self.event_stream())
     }

@@ -1,3 +1,4 @@
+use crate::settings::FontSettings;
 use iced::{Font, Size};
 use iced_core::{
     alignment::{Horizontal, Vertical},
@@ -5,7 +6,6 @@ use iced_core::{
     Text,
 };
 use iced_graphics::text::paragraph;
-use crate::settings::FontSettings;
 
 #[derive(Debug, Clone)]
 pub struct TermFont {

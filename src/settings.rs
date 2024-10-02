@@ -43,7 +43,7 @@ impl Default for FontSettings {
 
 #[derive(Default, Debug, Clone)]
 pub struct ThemeSettings {
-    pub color_pallete: Box<ColorPalette>
+    pub color_pallete: Box<ColorPalette>,
 }
 
 impl ThemeSettings {

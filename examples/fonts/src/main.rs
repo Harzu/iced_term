@@ -1,10 +1,7 @@
 use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::{button, column, container, row};
-use iced::{
-    executor, window, Application, Command, Font, Length, Settings, Size,
-    Subscription, Theme,
-};
+use iced::{window, Font, Length, Size, Subscription, Task, Theme};
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
     "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
@@ -14,22 +11,19 @@ const TERM_FONT_3270_BYTES: &[u8] =
     include_bytes!("../assets/fonts/3270/3270NerdFont-Regular.ttf");
 
 fn main() -> iced::Result {
-    App::run(Settings {
-        antialiasing: false,
-        window: window::Settings {
-            size: Size {
-                width: 1280.0,
-                height: 720.0,
-            },
-            ..window::Settings::default()
-        },
-        ..Settings::default()
-    })
+    iced::application(App::title, App::update, App::view)
+        .antialiasing(false)
+        .window_size(Size {
+            width: 1280.0,
+            height: 720.0,
+        })
+        .subscription(App::subscription)
+        .run_with(App::new)
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    IcedTermEvent(iced_term::Event),
+pub enum Event {
+    Terminal(iced_term::Event),
     FontLoaded(Result<(), iced::font::Error>),
     FontChanged(String),
     FontSizeInc,
@@ -37,23 +31,19 @@ pub enum Message {
 }
 
 struct App {
-    term: iced_term::Term,
-    font_setting: iced_term::FontSettings,
+    title: String,
+    term: iced_term::Terminal,
+    font_setting: iced_term::settings::FontSettings,
 }
 
-impl Application for App {
-    type Executor = executor::Default;
-    type Message = Message;
-    type Theme = Theme;
-    type Flags = ();
-
-    fn new(_flags: ()) -> (Self, Command<Message>) {
+impl App {
+    fn new() -> (Self, Task<Event>) {
         let system_shell = std::env::var("SHELL")
             .expect("SHELL variable is not defined")
             .to_string();
         let term_id = 0;
-        let term_settings = iced_term::TermSettings {
-            font: iced_term::FontSettings {
+        let term_settings = iced_term::settings::Settings {
+            font: iced_term::settings::FontSettings {
                 size: 14.0,
                 font_type: Font {
                     weight: Weight::Bold,
@@ -63,33 +53,41 @@ impl Application for App {
                 },
                 ..Default::default()
             },
-            theme: iced_term::ColorPalette::default(),
-            backend: iced_term::BackendSettings {
+            theme: iced_term::settings::ThemeSettings::default(),
+            backend: iced_term::settings::BackendSettings {
                 shell: system_shell.to_string(),
             },
         };
 
         (
             Self {
-                term: iced_term::Term::new(term_id, term_settings.clone()),
+                title: String::from("fonts"),
+                term: iced_term::Terminal::new(term_id, term_settings.clone()),
                 font_setting: term_settings.font,
             },
-            Command::batch(vec![
+            Task::batch(vec![
                 iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
-                    .map(Message::FontLoaded),
-                iced::font::load(TERM_FONT_3270_BYTES).map(Message::FontLoaded),
+                    .map(Event::FontLoaded),
+                iced::font::load(TERM_FONT_3270_BYTES).map(Event::FontLoaded),
             ]),
         )
     }
 
     fn title(&self) -> String {
-        String::from("Terminal app")
+        self.title.clone()
     }
 
-    fn update(&mut self, message: Self::Message) -> Command<Message> {
-        match message {
-            Message::FontLoaded(_) => Command::none(),
-            Message::FontChanged(name) => {
+    fn subscription(&self) -> Subscription<Event> {
+        let term_subscription = iced_term::Subscription::new(self.term.id);
+        let term_event_stream = term_subscription.event_stream();
+        Subscription::run_with_id(self.term.id, term_event_stream)
+            .map(Event::Terminal)
+    }
+
+    fn update(&mut self, event: Event) -> Task<Event> {
+        match event {
+            Event::FontLoaded(_) => Task::none(),
+            Event::FontChanged(name) => {
                 if name.as_str() == "3270" {
                     self.font_setting.font_type = Font {
                         weight: Weight::Normal,
@@ -107,62 +105,62 @@ impl Application for App {
                 self.term.update(iced_term::Command::ChangeFont(
                     self.font_setting.clone(),
                 ));
-                Command::none()
+                Task::none()
             },
-            Message::FontSizeInc => {
+            Event::FontSizeInc => {
                 self.font_setting.size += 1.0;
                 self.term.update(iced_term::Command::ChangeFont(
                     self.font_setting.clone(),
                 ));
-                Command::none()
+                Task::none()
             },
-            Message::FontSizeDec => {
+            Event::FontSizeDec => {
                 if self.font_setting.size > 0.0 {
                     self.font_setting.size -= 1.0;
                     self.term.update(iced_term::Command::ChangeFont(
                         self.font_setting.clone(),
                     ));
                 }
-                Command::none()
+                Task::none()
             },
-            Message::IcedTermEvent(iced_term::Event::CommandReceived(
-                _,
-                cmd,
-            )) => match self.term.update(cmd) {
-                iced_term::actions::Action::Shutdown => {
-                    window::close(window::Id::MAIN)
-                },
-                _ => Command::none(),
+            Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
+                match self.term.update(cmd) {
+                    iced_term::actions::Action::Shutdown => {
+                        window::get_latest().and_then(window::close)
+                    },
+                    iced_term::actions::Action::ChangeTitle(title) => {
+                        self.title = title;
+                        Task::none()
+                    },
+                    _ => Task::none(),
+                }
             },
         }
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        self.term.subscription().map(Message::IcedTermEvent)
-    }
-
-    fn view(&self) -> Element<Message, Theme, iced::Renderer> {
+    fn view(&self) -> Element<Event, Theme, iced::Renderer> {
         let content = column![
             row![
-                button("JetBrains").width(Length::Fill).padding(8).on_press(
-                    Message::FontChanged("JetBrains Mono".to_string())
-                ),
+                button("JetBrains")
+                    .width(Length::Fill)
+                    .padding(8)
+                    .on_press(Event::FontChanged("JetBrains Mono".to_string())),
                 button("3270")
                     .width(Length::Fill)
                     .padding(8)
-                    .on_press(Message::FontChanged("3270".to_string())),
+                    .on_press(Event::FontChanged("3270".to_string())),
             ],
             row![
                 button("+ size")
                     .width(Length::Fill)
                     .padding(8)
-                    .on_press(Message::FontSizeInc),
+                    .on_press(Event::FontSizeInc),
                 button("- size")
                     .width(Length::Fill)
                     .padding(8)
-                    .on_press(Message::FontSizeDec),
+                    .on_press(Event::FontSizeDec),
             ],
-            row![iced_term::term_view(&self.term).map(Message::IcedTermEvent)],
+            row![iced_term::term_view(&self.term).map(Event::Terminal)],
         ];
 
         container(content)

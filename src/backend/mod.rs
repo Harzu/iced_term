@@ -1,4 +1,6 @@
 // pub mod settings;
+use crate::actions::Action;
+use crate::settings::BackendSettings;
 use alacritty_terminal::event::{
     Event, EventListener, Notify, OnResize, WindowSize,
 };
@@ -12,6 +14,7 @@ use alacritty_terminal::term::{
     self, cell::Cell, test::TermSize, viewport_to_point, Term, TermMode,
 };
 use alacritty_terminal::{tty, Grid};
+use iced::keyboard::Modifiers;
 use iced_core::Size;
 use std::borrow::Cow;
 use std::cmp::min;
@@ -19,8 +22,6 @@ use std::io::Result;
 use std::ops::{Index, RangeInclusive};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::settings::BackendSettings;
-use crate::actions::Action;
 
 #[derive(Debug, Clone)]
 pub enum BackendCommand {
@@ -30,15 +31,26 @@ pub enum BackendCommand {
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
     ProcessLink(LinkAction, Point),
-    MouseReport(MouseMode, MouseButton, Point, bool),
+    MouseReport(MouseButton, Modifiers, Point, bool),
     ProcessAlacrittyEvent(Event),
 }
 
 #[derive(Debug, Clone)]
 pub enum MouseMode {
     Sgr,
-    // TODO: need to implementation
-    Normal,
+    Normal(bool),
+}
+
+impl From<TermMode> for MouseMode {
+    fn from(term_mode: TermMode) -> Self {
+        if term_mode.contains(TermMode::SGR_MOUSE) {
+            MouseMode::Sgr
+        } else if term_mode.contains(TermMode::UTF8_MOUSE) {
+            MouseMode::Normal(true)
+        } else {
+            MouseMode::Normal(false)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -221,13 +233,8 @@ impl Backend {
             BackendCommand::ProcessLink(link_action, point) => {
                 action = self.process_link_action(&term, link_action, point);
             },
-            BackendCommand::MouseReport(mode, button, point, pressed) => {
-                match mode {
-                    MouseMode::Sgr => {
-                        self.sgr_mouse_report(point, button, pressed)
-                    },
-                    MouseMode::Normal => {},
-                }
+            BackendCommand::MouseReport(button, modifiers, point, pressed) => {
+                self.process_mouse_report(button, modifiers, point, pressed);
                 action = Action::Redraw;
             },
         };
@@ -282,23 +289,86 @@ impl Backend {
         }
     }
 
-    fn sgr_mouse_report(
+    fn process_mouse_report(
         &self,
-        point: Point,
         button: MouseButton,
+        modifiers: Modifiers,
+        point: Point,
         pressed: bool,
     ) {
+        let mut mods = 0;
+        if modifiers.contains(Modifiers::SHIFT) {
+            mods += 4;
+        }
+        if modifiers.contains(Modifiers::ALT) {
+            mods += 8;
+        }
+        if modifiers.contains(Modifiers::COMMAND) {
+            mods += 16;
+        }
+
+        match MouseMode::from(self.last_content.terminal_mode) {
+            MouseMode::Sgr => {
+                self.sgr_mouse_report(point, button as u8 + mods, pressed)
+            },
+            MouseMode::Normal(is_utf8) => {
+                if pressed {
+                    self.normal_mouse_report(
+                        point,
+                        button as u8 + mods,
+                        is_utf8,
+                    )
+                } else {
+                    self.normal_mouse_report(point, 3 + mods, is_utf8)
+                }
+            },
+        }
+    }
+
+    fn sgr_mouse_report(&self, point: Point, button: u8, pressed: bool) {
         let c = if pressed { 'M' } else { 'm' };
 
         let msg = format!(
             "\x1b[<{};{};{}{}",
-            button as u8,
+            button,
             point.column + 1,
             point.line + 1,
             c
         );
 
         self.notifier.notify(msg.as_bytes().to_vec());
+    }
+
+    fn normal_mouse_report(&self, point: Point, button: u8, is_utf8: bool) {
+        let Point { line, column } = point;
+        let max_point = if is_utf8 { 2015 } else { 223 };
+
+        if line >= max_point || column >= max_point {
+            return;
+        }
+
+        let mut msg = vec![b'\x1b', b'[', b'M', 32 + button];
+
+        let mouse_pos_encode = |pos: usize| -> Vec<u8> {
+            let pos = 32 + 1 + pos;
+            let first = 0xC0 + pos / 64;
+            let second = 0x80 + (pos & 63);
+            vec![first as u8, second as u8]
+        };
+
+        if is_utf8 && column >= Column(95) {
+            msg.append(&mut mouse_pos_encode(column.0));
+        } else {
+            msg.push(32 + 1 + column.0 as u8);
+        }
+
+        if is_utf8 && line >= 95 {
+            msg.append(&mut mouse_pos_encode(line.0 as usize));
+        } else {
+            msg.push(32 + 1 + line.0 as u8);
+        }
+
+        self.notifier.notify(msg);
     }
 
     fn start_selection(

@@ -1,9 +1,9 @@
 use crate::actions::Action;
-use crate::backend::{BackendCommand, Backend};
-use crate::settings::{Settings, FontSettings, ThemeSettings, BackendSettings};
+use crate::backend::{Backend, BackendCommand};
 use crate::bindings::{Binding, BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
-use crate::theme::{Theme, ColorPalette};
+use crate::settings::{BackendSettings, FontSettings, Settings, ThemeSettings};
+use crate::theme::{ColorPalette, Theme};
 use iced::widget::canvas::Cache;
 use tokio::sync::mpsc::Sender;
 
@@ -21,49 +21,14 @@ pub enum Command {
     ProcessBackendCommand(BackendCommand),
 }
 
-pub(crate) trait ViewProxy {
-    fn id(&self) -> u64;
-    fn bindings(&self) -> &BindingsLayout;
-    fn cache(&self) -> &Cache;
-    fn backend(&self) -> &Option<Backend>;
-    fn theme(&self) -> &Theme;
-    fn font(&self) -> &TermFont;
-}
-
 pub struct Terminal {
-    id: u64,
-    font: TermFont,
-    theme: Theme,
-    cache: Cache,
-    bindings: BindingsLayout,
+    pub id: u64,
     backend_settings: BackendSettings,
-    backend: Option<Backend>,
-}
-
-impl ViewProxy for Terminal {
-    fn id(&self) -> u64 {
-        self.id
-    }
-
-    fn backend(&self) -> &Option<Backend> {
-        &self.backend
-    }
-
-    fn bindings(&self) -> &BindingsLayout {
-        &self.bindings
-    }
-
-    fn cache(&self) -> &Cache {
-        &self.cache
-    }
-
-    fn font(&self) -> &TermFont {
-        &self.font
-    }
-
-    fn theme(&self) -> &Theme {
-        &self.theme
-    }
+    pub(crate) font: TermFont,
+    pub(crate) theme: Theme,
+    pub(crate) cache: Cache,
+    pub(crate) bindings: BindingsLayout,
+    pub(crate) backend: Option<Backend>,
 }
 
 impl Terminal {
@@ -77,10 +42,6 @@ impl Terminal {
             backend_settings: settings.backend,
             backend: None,
         }
-    }
-
-    pub fn term_id(&self) -> u64 {
-        self.id
     }
 
     pub fn widget_id(&self) -> iced::widget::text_input::Id {

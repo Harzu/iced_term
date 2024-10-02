@@ -1,9 +1,8 @@
 use crate::backend::{
-    Backend, BackendCommand, LinkAction, MouseButton, MouseMode,
-    RenderableContent,
+    Backend, BackendCommand, LinkAction, MouseButton, RenderableContent,
 };
 use crate::bindings::{BindingAction, BindingsLayout, InputKind};
-use crate::terminal::{Event, Command, Terminal, ViewProxy};
+use crate::terminal::{Command, Event, Terminal};
 use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
@@ -29,7 +28,7 @@ pub fn term_view(term: &Terminal) -> Element<'_, Event> {
     container(TermView::new(term))
         .width(Length::Fill)
         .height(Length::Fill)
-        // .style(iced::theme)
+        .style(|_| term.theme.container_style())
         .into()
 }
 
@@ -64,7 +63,7 @@ impl<'a> TermView<'a> {
     }
 
     fn is_cursor_hovered_hyperlink(&self, state: &TermViewState) -> bool {
-        if let Some(ref backend) = self.term.backend() {
+        if let Some(ref backend) = self.term.backend {
             let content = backend.renderable_content();
             if let Some(hyperlink_range) = &content.hovered_hyperlink {
                 return hyperlink_range.contains(&state.mouse_position_on_grid);
@@ -82,7 +81,7 @@ impl<'a> TermView<'a> {
         event: iced::mouse::Event,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
-        if let Some(backend) = self.term.backend() {
+        if let Some(backend) = &self.term.backend {
             let terminal_content = backend.renderable_content();
             let terminal_mode = terminal_content.terminal_mode;
 
@@ -113,7 +112,7 @@ impl<'a> TermView<'a> {
                     Self::handle_button_released(
                         state,
                         &terminal_mode,
-                        self.term.bindings(),
+                        &self.term.bindings,
                         &mut commands,
                     );
                 },
@@ -121,7 +120,7 @@ impl<'a> TermView<'a> {
                     Self::handle_wheel_scrolled(
                         state,
                         delta,
-                        &self.term.font().measure(),
+                        &self.term.font.measure(),
                         &mut commands,
                     );
                 },
@@ -139,17 +138,19 @@ impl<'a> TermView<'a> {
         layout_position: Point,
         commands: &mut Vec<Command>,
     ) {
-        let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
-            && state.keyboard_modifiers.is_empty()
-        {
+        let cmd = if terminal_mode.intersects(TermMode::MOUSE_MODE) {
             Command::ProcessBackendCommand(BackendCommand::MouseReport(
-                MouseMode::Sgr,
                 MouseButton::LeftButton,
+                state.keyboard_modifiers,
                 state.mouse_position_on_grid,
                 true,
             ))
         } else {
-            let current_click = Click::new(cursor_position, mouse::Button::Left, state.last_click);
+            let current_click = Click::new(
+                cursor_position,
+                mouse::Button::Left,
+                state.last_click,
+            );
             let selection_type = match current_click.kind() {
                 mouse::click::Kind::Single => SelectionType::Simple,
                 mouse::click::Kind::Double => SelectionType::Semantic,
@@ -187,12 +188,10 @@ impl<'a> TermView<'a> {
         // Handle command or selection update based on terminal mode and modifiers
         if state.is_dragged {
             let terminal_mode = terminal_content.terminal_mode;
-            let cmd = if terminal_mode.contains(TermMode::SGR_MOUSE)
-                && state.keyboard_modifiers.is_empty()
-            {
+            let cmd = if terminal_mode.intersects(TermMode::MOUSE_MOTION) {
                 Command::ProcessBackendCommand(BackendCommand::MouseReport(
-                    MouseMode::Sgr,
                     MouseButton::LeftMove,
+                    state.keyboard_modifiers,
                     state.mouse_position_on_grid,
                     true,
                 ))
@@ -223,11 +222,11 @@ impl<'a> TermView<'a> {
     ) {
         state.is_dragged = false;
 
-        if terminal_mode.contains(TermMode::SGR_MOUSE) {
+        if terminal_mode.intersects(TermMode::MOUSE_MODE) {
             commands.push(Command::ProcessBackendCommand(
                 BackendCommand::MouseReport(
-                    MouseMode::Sgr,
                     MouseButton::LeftButton,
+                    state.keyboard_modifiers,
                     state.mouse_position_on_grid,
                     false,
                 ),
@@ -282,7 +281,7 @@ impl<'a> TermView<'a> {
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         event: iced::keyboard::Event,
     ) -> Option<Command> {
-        if let Some(ref backend) = self.term.backend() {
+        if let Some(ref backend) = &self.term.backend {
             let mut binding_action = BindingAction::Ignore;
             let last_content = backend.renderable_content();
             match event {
@@ -304,23 +303,28 @@ impl<'a> TermView<'a> {
                 iced::keyboard::Event::KeyPressed {
                     key,
                     modifiers,
+                    text,
                     ..
                 } => match key {
-                    Key::Character(c) => {
-                        binding_action = self.term.bindings().get_action(
-                            InputKind::Char(c.to_ascii_lowercase()),
-                            state.keyboard_modifiers,
-                            last_content.terminal_mode,
-                        );
+                    Key::Character(_) => {
+                        if let Some(c) = text {
+                            binding_action = self.term.bindings.get_action(
+                                InputKind::Char(c.to_ascii_lowercase()),
+                                state.keyboard_modifiers,
+                                last_content.terminal_mode,
+                            );
 
-                        if binding_action == BindingAction::Ignore {
-                            return Some(Command::ProcessBackendCommand(
-                                BackendCommand::Write(c.as_bytes().to_vec()),
-                            ));
+                            if binding_action == BindingAction::Ignore {
+                                return Some(Command::ProcessBackendCommand(
+                                    BackendCommand::Write(
+                                        c.as_bytes().to_vec(),
+                                    ),
+                                ));
+                            }
                         }
                     },
                     Key::Named(code) => {
-                        binding_action = self.term.bindings().get_action(
+                        binding_action = self.term.bindings.get_action(
                             InputKind::KeyCode(code),
                             modifiers,
                             last_content.terminal_mode,
@@ -402,7 +406,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
     ) {
         let state = tree.state.downcast_mut::<TermViewState>();
         let wid = iced_core::widget::Id::from(self.term.widget_id());
-        operation.focusable(state, Some(&wid));   
+        operation.focusable(state, Some(&wid));
     }
 
     fn draw(
@@ -415,19 +419,19 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        if let Some(ref backend) = self.term.backend() {
+        if let Some(ref backend) = &self.term.backend {
             let state = tree.state.downcast_ref::<TermViewState>();
             let content = backend.renderable_content();
             let term_size = content.terminal_size;
             let cell_width = term_size.cell_width as f32;
             let cell_height = term_size.cell_height as f32;
-            let font_size = self.term.font().size();
-            let font_scale_factor = self.term.font().scale_factor();
+            let font_size = self.term.font.size();
+            let font_scale_factor = self.term.font.scale_factor();
             let layout_offset_x = layout.position().x;
             let layout_offset_y = layout.position().y;
 
             let geom =
-                self.term.cache().draw(renderer, viewport.size(), |frame| {
+                self.term.cache.draw(renderer, viewport.size(), |frame| {
                     for indexed in content.grid.display_iter() {
                         let x = layout_offset_x
                             + (indexed.point.column.0 as f32 * cell_width);
@@ -436,8 +440,8 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                                 + content.grid.display_offset() as f32)
                                 * cell_height);
 
-                        let mut fg = self.term.theme().get_color(indexed.fg);
-                        let mut bg = self.term.theme().get_color(indexed.bg);
+                        let mut fg = self.term.theme.get_color(indexed.fg);
+                        let mut bg = self.term.theme.get_color(indexed.bg);
 
                         // Handle dim, inverse, and selected text
                         if indexed.cell.flags.intersects(
@@ -488,7 +492,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                         // Handle cursor rendering
                         if content.grid.cursor.point == indexed.point {
                             let cursor_color =
-                                self.term.theme().get_color(content.cursor.fg);
+                                self.term.theme.get_color(content.cursor.fg);
                             let cursor_rect =
                                 Path::rectangle(Point::new(x, y), cell_size);
                             frame.fill(&cursor_rect, cursor_color);
@@ -509,7 +513,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                                     x + (cell_size.width / 2.0),
                                     y + (cell_size.height / 2.0),
                                 ),
-                                font: self.term.font().font_type(),
+                                font: self.term.font.font_type(),
                                 size: iced_core::Pixels(font_size),
                                 color: fg,
                                 horizontal_alignment: Horizontal::Center,
@@ -542,13 +546,13 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
     ) -> iced::event::Status {
         let state = tree.state.downcast_mut::<TermViewState>();
         let layout_size = layout.bounds().size();
-        if state.size != layout_size && self.term.backend().is_some() {
+        if state.size != layout_size && self.term.backend.is_some() {
             state.size = layout_size;
             let cmd = Command::ProcessBackendCommand(BackendCommand::Resize(
                 Some(layout_size),
                 None,
             ));
-            shell.publish(Event::CommandReceived(self.term.id(), cmd));
+            shell.publish(Event::CommandReceived(self.term.id, cmd));
         }
 
         if !state.is_focused {
@@ -576,7 +580,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
 
         if !commands.is_empty() {
             for cmd in commands {
-                shell.publish(Event::CommandReceived(self.term.id(), cmd));
+                shell.publish(Event::CommandReceived(self.term.id, cmd));
             }
             iced::event::Status::Captured
         } else {
@@ -595,7 +599,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         let state = tree.state.downcast_ref::<TermViewState>();
         let mut cursor_mode = iced_core::mouse::Interaction::Idle;
         let mut terminal_mode = TermMode::empty();
-        if let Some(ref backend) = self.term.backend() {
+        if let Some(ref backend) = &self.term.backend {
             terminal_mode = backend.renderable_content().terminal_mode;
         }
         if self.is_cursor_in_layout(cursor, layout)
@@ -672,12 +676,13 @@ mod tests {
         use alacritty_terminal::index::{Column, Line};
 
         #[test]
-        fn handles_sgr_mouse_mode_with_left_click() {
+        fn handles_mouse_mode_with_left_click() {
             let mut state = TermViewState::new();
-            let terminal_mode = TermMode::SGR_MOUSE;
+            let terminal_mode = TermMode::MOUSE_MODE;
             let layout_position = Point { x: 5.0, y: 5.0 };
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
+            let _modifiers = Modifiers::empty();
 
             TermView::handle_left_button_pressed(
                 &mut state,
@@ -691,8 +696,8 @@ mod tests {
             assert!(matches!(
                 commands[0],
                 Command::ProcessBackendCommand(BackendCommand::MouseReport(
-                    MouseMode::Sgr,
                     MouseButton::LeftButton,
+                    _modifiers,
                     TerminalGridPoint {
                         line: Line(0),
                         column: Column(0),
@@ -836,14 +841,15 @@ mod tests {
         }
 
         #[test]
-        fn generates_drag_update_command_when_dragged_in_srg_mode() {
+        fn generates_drag_update_command_when_dragged_in_mouse_motion_mode() {
             let mut state = TermViewState::new();
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
-            terminal_content.terminal_mode = TermMode::SGR_MOUSE;
+            terminal_content.terminal_mode = TermMode::MOUSE_MOTION;
             let layout_position = Point { x: 5.0, y: 5.0 };
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
+            let _modifiers = Modifiers::empty();
 
             TermView::handle_cursor_moved(
                 &mut state,
@@ -857,8 +863,8 @@ mod tests {
             assert!(matches!(
                 commands[0],
                 Command::ProcessBackendCommand(BackendCommand::MouseReport(
-                    MouseMode::Sgr,
                     MouseButton::LeftMove,
+                    _modifiers,
                     TerminalGridPoint {
                         line: Line(49),
                         column: Column(79),
@@ -941,11 +947,12 @@ mod tests {
         use alacritty_terminal::index::{Column, Line};
 
         #[test]
-        fn sgr_mouse_mode_activated() {
+        fn mouse_mode_activated() {
             let mut state = TermViewState::new();
-            let terminal_mode = TermMode::SGR_MOUSE;
+            let terminal_mode = TermMode::MOUSE_MODE;
             let bindings = BindingsLayout::new();
             let mut commands = Vec::new();
+            let _modifiers = Modifiers::empty();
 
             TermView::handle_button_released(
                 &mut state,
@@ -958,14 +965,14 @@ mod tests {
             assert!(matches!(
                 commands[0],
                 Command::ProcessBackendCommand(BackendCommand::MouseReport(
-                    MouseMode::Sgr,
                     MouseButton::LeftButton,
+                    _modifiers,
                     TerminalGridPoint {
                         line: Line(0),
                         column: Column(0)
                     },
                     false
-                )),
+                ))
             ));
         }
 
@@ -973,9 +980,10 @@ mod tests {
         fn link_open_on_button_release() {
             let mut state = TermViewState::new();
             state.keyboard_modifiers = Modifiers::COMMAND;
-            let terminal_mode = TermMode::SGR_MOUSE; // Assume SGR_MOUSE mode doesn't affect link opening
+            let terminal_mode = TermMode::MOUSE_MODE;
             let bindings = BindingsLayout::new();
             let mut commands = Vec::new();
+            let _modifiers = Modifiers::empty();
 
             TermView::handle_button_released(
                 &mut state,
@@ -988,14 +996,14 @@ mod tests {
             assert!(matches!(
                 commands[0],
                 Command::ProcessBackendCommand(BackendCommand::MouseReport(
-                    MouseMode::Sgr,
                     MouseButton::LeftButton,
+                    _modifiers,
                     TerminalGridPoint {
                         line: Line(0),
                         column: Column(0)
                     },
                     false
-                )),
+                ))
             ));
             assert!(matches!(
                 commands[1],
@@ -1010,7 +1018,7 @@ mod tests {
         }
 
         #[test]
-        fn link_open_on_button_release_in_non_srg_mode() {
+        fn link_open_on_button_release_in_non_mouse_mode() {
             let mut state = TermViewState::new();
             state.keyboard_modifiers = Modifiers::COMMAND;
             state.mouse_position_on_grid = TerminalGridPoint {
