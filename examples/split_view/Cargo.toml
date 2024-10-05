@@ -1,8 +1,8 @@
 [package]
 name = "split_view"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 
 [dependencies]
-iced = { version = "0.12" }
+iced = { version = "0.13.1" }
 iced_term = { path = "../../" }

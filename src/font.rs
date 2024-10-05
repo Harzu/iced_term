@@ -1,3 +1,4 @@
+use crate::settings::FontSettings;
 use iced::{Font, Size};
 use iced_core::{
     alignment::{Horizontal, Vertical},
@@ -7,28 +8,11 @@ use iced_core::{
 use iced_graphics::text::paragraph;
 
 #[derive(Debug, Clone)]
-pub struct FontSettings {
-    pub size: f32,
-    pub scale_factor: f32,
-    pub font_type: Font,
-}
-
-impl Default for FontSettings {
-    fn default() -> Self {
-        Self {
-            size: 14.0,
-            scale_factor: 1.3,
-            font_type: Font::MONOSPACE,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct TermFont {
-    size: f32,
-    font_type: Font,
-    scale_factor: f32,
-    measure: Size<f32>,
+    pub(crate) size: f32,
+    pub(crate) font_type: Font,
+    pub(crate) scale_factor: f32,
+    pub(crate) measure: Size<f32>,
 }
 
 impl TermFont {
@@ -44,22 +28,6 @@ impl TermFont {
             ),
         }
     }
-
-    pub fn size(&self) -> f32 {
-        self.size
-    }
-
-    pub fn font_type(&self) -> Font {
-        self.font_type
-    }
-
-    pub fn measure(&self) -> Size<f32> {
-        self.measure
-    }
-
-    pub fn scale_factor(&self) -> f32 {
-        self.scale_factor
-    }
 }
 
 fn font_measure(
@@ -67,8 +35,7 @@ fn font_measure(
     scale_factor: f32,
     font_type: Font,
 ) -> Size<f32> {
-    let mut paragraph = paragraph::Paragraph::new();
-    paragraph.update(Text {
+    let paragraph = paragraph::Paragraph::with_text(Text {
         content: "m",
         font: font_type,
         size: iced_core::Pixels(font_size),
@@ -77,6 +44,7 @@ fn font_measure(
         shaping: TextShaping::Advanced,
         line_height: LineHeight::Relative(scale_factor),
         bounds: Size::INFINITY,
+        wrapping: iced_core::text::Wrapping::Glyph,
     });
 
     paragraph.min_bounds()

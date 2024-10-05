@@ -82,7 +82,7 @@ macro_rules! generate_bindings {
 }
 
 #[derive(Clone, Debug)]
-pub struct BindingsLayout {
+pub(crate) struct BindingsLayout {
     layout: Vec<(Binding<InputKind>, BindingAction)>,
 }
 
@@ -93,7 +93,7 @@ impl Default for BindingsLayout {
 }
 
 impl BindingsLayout {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut layout = Self {
             layout: default_keyboard_bindings(),
         };
@@ -102,7 +102,7 @@ impl BindingsLayout {
         layout
     }
 
-    pub fn add_bindings(
+    pub(crate) fn add_bindings(
         &mut self,
         bindings: Vec<(Binding<InputKind>, BindingAction)>,
     ) {
@@ -118,7 +118,7 @@ impl BindingsLayout {
         }
     }
 
-    pub fn get_action(
+    pub(crate) fn get_action(
         &self,
         input: InputKind,
         modifiers: Modifiers,

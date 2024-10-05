@@ -1,14 +1,17 @@
 pub mod actions;
-mod backend;
 pub mod bindings;
+pub mod settings;
+
+mod backend;
 mod font;
-mod term;
+mod subscription;
+mod terminal;
 mod theme;
 mod view;
 
 pub use alacritty_terminal::term::TermMode;
-pub use backend::settings::BackendSettings;
-pub use font::FontSettings;
-pub use term::{Command, Event, Term, TermSettings};
-pub use theme::{ColorPalette, TermTheme};
-pub use view::{term_view, TermView, TermViewState};
+pub use alacritty_terminal::event::Event as AlacrittyEvent;
+pub use subscription::Subscription;
+pub use terminal::{Command, Event, Terminal};
+pub use theme::{ColorPalette, Theme};
+pub use view::TerminalView;

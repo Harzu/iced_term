@@ -1,9 +1,9 @@
 [package]
 name = "full_screen"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 publish = false
 
 [dependencies]
-iced = "0.12"
+iced = "0.13.1"
 iced_term = { path = "../../" }

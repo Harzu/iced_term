@@ -1,6 +1,11 @@
+use crate::settings::ThemeSettings;
 use alacritty_terminal::vte::ansi::{self, NamedColor};
-use iced::{widget::container, Color, Theme};
+use iced::{widget::container, Color};
 use std::collections::HashMap;
+
+pub(crate) trait TerminalStyle {
+    fn container_style(&self) -> container::Style;
+}
 
 #[derive(Debug, Clone)]
 pub struct ColorPalette {
@@ -70,54 +75,26 @@ impl Default for ColorPalette {
 }
 
 #[derive(Debug, Clone)]
-pub struct TermTheme {
+pub struct Theme {
     palette: Box<ColorPalette>,
     ansi256_colors: HashMap<u8, Color>,
 }
 
-impl Default for TermTheme {
+impl Default for Theme {
     fn default() -> Self {
         Self {
             palette: Box::<ColorPalette>::default(),
-            ansi256_colors: TermTheme::get_ansi256_colors(),
+            ansi256_colors: build_ansi256_colors(),
         }
     }
 }
 
-impl TermTheme {
-    pub fn new(palette: Box<ColorPalette>) -> Self {
+impl Theme {
+    pub fn new(settings: ThemeSettings) -> Self {
         Self {
-            palette,
-            ansi256_colors: TermTheme::get_ansi256_colors(),
+            palette: settings.color_pallete,
+            ansi256_colors: build_ansi256_colors(),
         }
-    }
-
-    fn get_ansi256_colors() -> HashMap<u8, Color> {
-        let mut ansi256_colors = HashMap::new();
-
-        for r in 0..6 {
-            for g in 0..6 {
-                for b in 0..6 {
-                    // Reserve the first 16 colors for config.
-                    let index = 16 + r * 36 + g * 6 + b;
-                    let color = Color::from_rgb8(
-                        if r == 0 { 0 } else { r * 40 + 55 },
-                        if g == 0 { 0 } else { g * 40 + 55 },
-                        if b == 0 { 0 } else { b * 40 + 55 },
-                    );
-                    ansi256_colors.insert(index, color);
-                }
-            }
-        }
-
-        let index: u8 = 232;
-        for i in 0..24 {
-            let value = i * 10 + 8;
-            ansi256_colors
-                .insert(index + i, Color::from_rgb8(value, value, value));
-        }
-
-        ansi256_colors
     }
 
     pub fn get_color(&self, c: ansi::Color) -> Color {
@@ -205,24 +182,31 @@ impl TermTheme {
     }
 }
 
-impl container::StyleSheet for TermTheme {
-    type Style = Theme;
+fn build_ansi256_colors() -> HashMap<u8, Color> {
+    let mut ansi256_colors = HashMap::new();
 
-    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            background: Some(
-                hex_to_color(&self.palette.background)
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "invalid background color {}",
-                            self.palette.background
-                        )
-                    })
-                    .into(),
-            ),
-            ..container::Appearance::default()
+    for r in 0..6 {
+        for g in 0..6 {
+            for b in 0..6 {
+                // Reserve the first 16 colors for config.
+                let index = 16 + r * 36 + g * 6 + b;
+                let color = Color::from_rgb8(
+                    if r == 0 { 0 } else { r * 40 + 55 },
+                    if g == 0 { 0 } else { g * 40 + 55 },
+                    if b == 0 { 0 } else { b * 40 + 55 },
+                );
+                ansi256_colors.insert(index, color);
+            }
         }
     }
+
+    let index: u8 = 232;
+    for i in 0..24 {
+        let value = i * 10 + 8;
+        ansi256_colors.insert(index + i, Color::from_rgb8(value, value, value));
+    }
+
+    ansi256_colors
 }
 
 fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
@@ -237,10 +221,27 @@ fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
     Ok(Color::from_rgb8(r, g, b))
 }
 
+impl TerminalStyle for Theme {
+    fn container_style(&self) -> container::Style {
+        container::Style {
+            background: Some(
+                hex_to_color(&self.palette.background)
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "invalid background color {}",
+                            self.palette.background
+                        )
+                    })
+                    .into(),
+            ),
+            ..container::Style::default()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::hex_to_color;
-    use crate::TermTheme;
+    use super::*;
     use alacritty_terminal::vte::ansi;
     use std::collections::HashMap;
 
@@ -266,7 +267,7 @@ mod tests {
 
     #[test]
     fn get_basic_indexed_colors() {
-        let default_theme = TermTheme::default();
+        let default_theme = Theme::default();
         let basic_indexed_colors_map: HashMap<u8, String> = HashMap::from([
             (0, default_theme.palette.black.clone()),
             (1, default_theme.palette.red.clone()),
