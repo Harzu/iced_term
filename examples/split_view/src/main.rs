@@ -241,7 +241,7 @@ fn view_content(
     tabs: &HashMap<u64, iced_term::Terminal>,
 ) -> Element<'_, Event> {
     let tab = tabs.get(&pane_id).expect("tab with target id not found");
-    container(TerminalView::new(tab).map(Event::Terminal))
+    container(TerminalView::show(tab).map(Event::Terminal))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(5)

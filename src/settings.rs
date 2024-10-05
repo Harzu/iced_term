@@ -1,12 +1,11 @@
-use iced::Font;
 use crate::ColorPalette;
+use iced::Font;
 
 #[cfg(target_os = "windows")]
 const DEFAULT_SHELL: &str = "wsl.exe";
 
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_SHELL: &str = "/bin/bash";
-
 
 #[derive(Default, Clone)]
 pub struct Settings {

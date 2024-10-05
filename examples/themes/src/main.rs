@@ -151,7 +151,7 @@ impl App {
                     }))
                 ),
             ],
-            row![TerminalView::new(&self.term).map(Event::Terminal)]
+            row![TerminalView::show(&self.term).map(Event::Terminal)]
         ];
 
         container(content)

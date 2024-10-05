@@ -86,7 +86,7 @@ impl App {
     }
 
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {
-        container(TerminalView::new(&self.term).map(Event::Terminal))
+        container(TerminalView::show(&self.term).map(Event::Terminal))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

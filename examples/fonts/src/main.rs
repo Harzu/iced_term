@@ -161,7 +161,7 @@ impl App {
                     .padding(8)
                     .on_press(Event::FontSizeDec),
             ],
-            row![TerminalView::new(&self.term).map(Event::Terminal)],
+            row![TerminalView::show(&self.term).map(Event::Terminal)],
         ];
 
         container(content)

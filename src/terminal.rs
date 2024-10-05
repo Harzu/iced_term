@@ -4,6 +4,7 @@ use crate::bindings::{Binding, BindingAction, BindingsLayout, InputKind};
 use crate::font::TermFont;
 use crate::settings::{BackendSettings, FontSettings, Settings, ThemeSettings};
 use crate::theme::{ColorPalette, Theme};
+use crate::AlacrittyEvent;
 use iced::widget::canvas::Cache;
 use tokio::sync::mpsc::Sender;
 
@@ -14,7 +15,7 @@ pub enum Event {
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    InitBackend(Sender<alacritty_terminal::event::Event>),
+    InitBackend(Sender<AlacrittyEvent>),
     ChangeTheme(Box<ColorPalette>),
     ChangeFont(FontSettings),
     AddBindings(Vec<(Binding<InputKind>, BindingAction)>),

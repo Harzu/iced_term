@@ -26,7 +26,7 @@ pub struct TerminalView<'a> {
 }
 
 impl<'a> TerminalView<'a> {
-    pub fn new(term: &'a Terminal) -> Element<'_, Event> {
+    pub fn show(term: &'a Terminal) -> Element<'_, Event> {
         container(Self { term })
             .width(Length::Fill)
             .height(Length::Fill)

@@ -10,6 +10,7 @@ mod theme;
 mod view;
 
 pub use alacritty_terminal::term::TermMode;
+pub use alacritty_terminal::event::Event as AlacrittyEvent;
 pub use subscription::Subscription;
 pub use terminal::{Command, Event, Terminal};
 pub use theme::{ColorPalette, Theme};

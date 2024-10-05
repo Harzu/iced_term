@@ -203,8 +203,7 @@ fn build_ansi256_colors() -> HashMap<u8, Color> {
     let index: u8 = 232;
     for i in 0..24 {
         let value = i * 10 + 8;
-        ansi256_colors
-            .insert(index + i, Color::from_rgb8(value, value, value));
+        ansi256_colors.insert(index + i, Color::from_rgb8(value, value, value));
     }
 
     ansi256_colors

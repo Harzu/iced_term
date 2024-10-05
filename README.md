@@ -19,6 +19,10 @@ Terminal emulator widget powered by ICED framework and alacritty terminal backen
 
 </div>
 
+## Unstable widget API
+
+The ICED fraemwork does not have the stable API and this widget is also under development, so I can not promise the stable API and to document it at least while the ICED won't release the 1.0.0 version.
+
 ## Features
 
 The widget is currently under development and does not provide full terminal features make sure that widget is covered everything you want.
@@ -35,7 +39,7 @@ The widget is currently under development and does not provide full terminal fea
 - Changing Font/Color scheme
 - Hyperlinks processing (hover/open)
 
-This widget tested on MacOS and Linux and is not tested on Windows.
+This widget was tested on MacOS, Linux and Windows (but only under [WSL2](https://learn.microsoft.com/en-us/windows/wsl/about)).
 
 ## Installation
 
@@ -59,7 +63,7 @@ Interacting with the widget is happened via:
 ```rust
 #[derive(Debug, Clone)]
 pub enum Command {
-    InitBackend(Sender<alacritty_terminal::event::Event>),
+    InitBackend(Sender<AlacrittyEvent>),
     ChangeTheme(Box<ColorPalette>),
     ChangeFont(FontSettings),
     AddBindings(Vec<(Binding<InputKind>, BindingAction)>),
@@ -165,7 +169,7 @@ impl App {
 impl App {
     // ... other methods
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {
-        container(iced_term::term_view(&self.term).map(Event::Terminal))
+        container(iced_term::TerminalView::show(&self.term).map(Event::Terminal))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -208,7 +212,7 @@ fn main() -> iced::Result {
 cargo run --release
 ```
 
-**Step 9.** To be happy
+**Step 9.** To be happy!
 
 ## Examples
 
