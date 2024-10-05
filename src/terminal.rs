@@ -23,12 +23,12 @@ pub enum Command {
 
 pub struct Terminal {
     pub id: u64,
-    backend_settings: BackendSettings,
     pub(crate) font: TermFont,
     pub(crate) theme: Theme,
     pub(crate) cache: Cache,
     pub(crate) bindings: BindingsLayout,
     pub(crate) backend: Option<Backend>,
+    backend_settings: BackendSettings,
 }
 
 impl Terminal {
@@ -57,7 +57,7 @@ impl Terminal {
                         self.id,
                         sender,
                         self.backend_settings.clone(),
-                        self.font.measure(),
+                        self.font.measure,
                     )
                     .unwrap_or_else(|_| {
                         panic!("init pty with ID: {} is failed", self.id);
@@ -74,7 +74,7 @@ impl Terminal {
                 if let Some(ref mut backend) = self.backend {
                     action = backend.process_command(BackendCommand::Resize(
                         None,
-                        Some(self.font.measure()),
+                        Some(self.font.measure),
                     ));
                     if action == Action::Redraw {
                         self.redraw();

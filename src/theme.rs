@@ -3,6 +3,10 @@ use alacritty_terminal::vte::ansi::{self, NamedColor};
 use iced::{widget::container, Color};
 use std::collections::HashMap;
 
+pub(crate) trait TerminalStyle {
+    fn container_style(&self) -> container::Style;
+}
+
 #[derive(Debug, Clone)]
 pub struct ColorPalette {
     pub foreground: String,
@@ -80,7 +84,7 @@ impl Default for Theme {
     fn default() -> Self {
         Self {
             palette: Box::<ColorPalette>::default(),
-            ansi256_colors: Theme::get_ansi256_colors(),
+            ansi256_colors: build_ansi256_colors(),
         }
     }
 }
@@ -89,23 +93,7 @@ impl Theme {
     pub fn new(settings: ThemeSettings) -> Self {
         Self {
             palette: settings.color_pallete,
-            ansi256_colors: Theme::get_ansi256_colors(),
-        }
-    }
-
-    pub(crate) fn container_style(&self) -> container::Style {
-        container::Style {
-            background: Some(
-                hex_to_color(&self.palette.background)
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "invalid background color {}",
-                            self.palette.background
-                        )
-                    })
-                    .into(),
-            ),
-            ..container::Style::default()
+            ansi256_colors: build_ansi256_colors(),
         }
     }
 
@@ -192,34 +180,34 @@ impl Theme {
             },
         }
     }
+}
 
-    fn get_ansi256_colors() -> HashMap<u8, Color> {
-        let mut ansi256_colors = HashMap::new();
+fn build_ansi256_colors() -> HashMap<u8, Color> {
+    let mut ansi256_colors = HashMap::new();
 
-        for r in 0..6 {
-            for g in 0..6 {
-                for b in 0..6 {
-                    // Reserve the first 16 colors for config.
-                    let index = 16 + r * 36 + g * 6 + b;
-                    let color = Color::from_rgb8(
-                        if r == 0 { 0 } else { r * 40 + 55 },
-                        if g == 0 { 0 } else { g * 40 + 55 },
-                        if b == 0 { 0 } else { b * 40 + 55 },
-                    );
-                    ansi256_colors.insert(index, color);
-                }
+    for r in 0..6 {
+        for g in 0..6 {
+            for b in 0..6 {
+                // Reserve the first 16 colors for config.
+                let index = 16 + r * 36 + g * 6 + b;
+                let color = Color::from_rgb8(
+                    if r == 0 { 0 } else { r * 40 + 55 },
+                    if g == 0 { 0 } else { g * 40 + 55 },
+                    if b == 0 { 0 } else { b * 40 + 55 },
+                );
+                ansi256_colors.insert(index, color);
             }
         }
-
-        let index: u8 = 232;
-        for i in 0..24 {
-            let value = i * 10 + 8;
-            ansi256_colors
-                .insert(index + i, Color::from_rgb8(value, value, value));
-        }
-
-        ansi256_colors
     }
+
+    let index: u8 = 232;
+    for i in 0..24 {
+        let value = i * 10 + 8;
+        ansi256_colors
+            .insert(index + i, Color::from_rgb8(value, value, value));
+    }
+
+    ansi256_colors
 }
 
 fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
@@ -232,6 +220,24 @@ fn hex_to_color(hex: &str) -> anyhow::Result<Color> {
     let b = u8::from_str_radix(&hex[5..7], 16)?;
 
     Ok(Color::from_rgb8(r, g, b))
+}
+
+impl TerminalStyle for Theme {
+    fn container_style(&self) -> container::Style {
+        container::Style {
+            background: Some(
+                hex_to_color(&self.palette.background)
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "invalid background color {}",
+                            self.palette.background
+                        )
+                    })
+                    .into(),
+            ),
+            ..container::Style::default()
+        }
+    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::{button, column, container, row};
 use iced::{window, Font, Length, Size, Subscription, Task, Theme};
+use iced_term::TerminalView;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
     "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
@@ -150,7 +151,7 @@ impl App {
                     }))
                 ),
             ],
-            row![iced_term::term_view(&self.term).map(Event::Terminal)]
+            row![TerminalView::new(&self.term).map(Event::Terminal)]
         ];
 
         container(content)

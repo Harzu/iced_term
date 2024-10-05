@@ -2,6 +2,7 @@ use iced::font::{Family, Stretch, Weight};
 use iced::keyboard::Modifiers;
 use iced::widget::container;
 use iced::{window, Element, Font, Length, Size, Subscription, Task, Theme};
+use iced_term::TerminalView;
 use iced_term::{
     self,
     bindings::{Binding, BindingAction, InputKind, KeyboardBinding},
@@ -136,7 +137,7 @@ impl App {
     }
 
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {
-        container(iced_term::term_view(&self.term).map(Event::Terminal))
+        container(TerminalView::new(&self.term).map(Event::Terminal))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

@@ -3,6 +3,7 @@ use crate::backend::{
 };
 use crate::bindings::{BindingAction, BindingsLayout, InputKind};
 use crate::terminal::{Command, Event, Terminal};
+use crate::theme::TerminalStyle;
 use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
@@ -20,21 +21,17 @@ use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Stroke;
 
-pub struct TermView<'a> {
+pub struct TerminalView<'a> {
     term: &'a Terminal,
 }
 
-pub fn term_view(term: &Terminal) -> Element<'_, Event> {
-    container(TermView::new(term))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_| term.theme.container_style())
-        .into()
-}
-
-impl<'a> TermView<'a> {
-    fn new(term: &'a Terminal) -> Self {
-        Self { term }
+impl<'a> TerminalView<'a> {
+    pub fn new(term: &'a Terminal) -> Element<'_, Event> {
+        container(Self { term })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_| term.theme.container_style())
+            .into()
     }
 
     pub fn focus<Message: 'static>(
@@ -62,7 +59,7 @@ impl<'a> TermView<'a> {
         false
     }
 
-    fn is_cursor_hovered_hyperlink(&self, state: &TermViewState) -> bool {
+    fn is_cursor_hovered_hyperlink(&self, state: &TerminalViewState) -> bool {
         if let Some(ref backend) = self.term.backend {
             let content = backend.renderable_content();
             if let Some(hyperlink_range) = &content.hovered_hyperlink {
@@ -75,7 +72,7 @@ impl<'a> TermView<'a> {
 
     fn handle_mouse_event(
         &self,
-        state: &mut TermViewState,
+        state: &mut TerminalViewState,
         layout_position: Point,
         cursor_position: Point,
         event: iced::mouse::Event,
@@ -120,7 +117,7 @@ impl<'a> TermView<'a> {
                     Self::handle_wheel_scrolled(
                         state,
                         delta,
-                        &self.term.font.measure(),
+                        &self.term.font.measure,
                         &mut commands,
                     );
                 },
@@ -132,7 +129,7 @@ impl<'a> TermView<'a> {
     }
 
     fn handle_left_button_pressed(
-        state: &mut TermViewState,
+        state: &mut TerminalViewState,
         terminal_mode: &TermMode,
         cursor_position: Point,
         layout_position: Point,
@@ -170,7 +167,7 @@ impl<'a> TermView<'a> {
     }
 
     fn handle_cursor_moved(
-        state: &mut TermViewState,
+        state: &mut TerminalViewState,
         terminal_content: &RenderableContent,
         position: Point,
         layout_position: Point,
@@ -215,7 +212,7 @@ impl<'a> TermView<'a> {
     }
 
     fn handle_button_released(
-        state: &mut TermViewState,
+        state: &mut TerminalViewState,
         terminal_mode: &TermMode,
         bindings: &BindingsLayout, // Use the actual type of your bindings here
         commands: &mut Vec<Command>,
@@ -249,7 +246,7 @@ impl<'a> TermView<'a> {
     }
 
     fn handle_wheel_scrolled(
-        state: &mut TermViewState,
+        state: &mut TerminalViewState,
         delta: ScrollDelta,
         font_measure: &Size<f32>,
         commands: &mut Vec<Command>,
@@ -277,7 +274,7 @@ impl<'a> TermView<'a> {
 
     fn handle_keyboard_event(
         &self,
-        state: &mut TermViewState,
+        state: &mut TerminalViewState,
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         event: iced::keyboard::Event,
     ) -> Option<Command> {
@@ -371,7 +368,7 @@ impl<'a> TermView<'a> {
     }
 }
 
-impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
+impl<'a> Widget<Event, Theme, iced::Renderer> for TerminalView<'a> {
     fn size(&self) -> Size<Length> {
         Size {
             width: Length::Fill,
@@ -380,11 +377,11 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
     }
 
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<TermViewState>()
+        tree::Tag::of::<TerminalViewState>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(TermViewState::new())
+        tree::State::new(TerminalViewState::new())
     }
 
     fn layout(
@@ -404,7 +401,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         _renderer: &iced::Renderer,
         operation: &mut dyn operation::Operation,
     ) {
-        let state = tree.state.downcast_mut::<TermViewState>();
+        let state = tree.state.downcast_mut::<TerminalViewState>();
         let wid = iced_core::widget::Id::from(self.term.widget_id());
         operation.focusable(state, Some(&wid));
     }
@@ -420,13 +417,13 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         viewport: &Rectangle,
     ) {
         if let Some(ref backend) = &self.term.backend {
-            let state = tree.state.downcast_ref::<TermViewState>();
+            let state = tree.state.downcast_ref::<TerminalViewState>();
             let content = backend.renderable_content();
             let term_size = content.terminal_size;
             let cell_width = term_size.cell_width as f32;
             let cell_height = term_size.cell_height as f32;
-            let font_size = self.term.font.size();
-            let font_scale_factor = self.term.font.scale_factor();
+            let font_size = self.term.font.size;
+            let font_scale_factor = self.term.font.scale_factor;
             let layout_offset_x = layout.position().x;
             let layout_offset_y = layout.position().y;
 
@@ -513,7 +510,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
                                     x + (cell_size.width / 2.0),
                                     y + (cell_size.height / 2.0),
                                 ),
-                                font: self.term.font.font_type(),
+                                font: self.term.font.font_type,
                                 size: iced_core::Pixels(font_size),
                                 color: fg,
                                 horizontal_alignment: Horizontal::Center,
@@ -544,7 +541,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         shell: &mut iced_graphics::core::Shell<'_, Event>,
         _viewport: &Rectangle,
     ) -> iced::event::Status {
-        let state = tree.state.downcast_mut::<TermViewState>();
+        let state = tree.state.downcast_mut::<TerminalViewState>();
         let layout_size = layout.bounds().size();
         if state.size != layout_size && self.term.backend.is_some() {
             state.size = layout_size;
@@ -596,7 +593,7 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
         _viewport: &Rectangle,
         _renderer: &iced::Renderer,
     ) -> iced_core::mouse::Interaction {
-        let state = tree.state.downcast_ref::<TermViewState>();
+        let state = tree.state.downcast_ref::<TerminalViewState>();
         let mut cursor_mode = iced_core::mouse::Interaction::Idle;
         let mut terminal_mode = TermMode::empty();
         if let Some(ref backend) = &self.term.backend {
@@ -616,14 +613,14 @@ impl<'a> Widget<Event, Theme, iced::Renderer> for TermView<'a> {
     }
 }
 
-impl<'a> From<TermView<'a>> for Element<'a, Event, Theme, iced::Renderer> {
-    fn from(widget: TermView<'a>) -> Self {
+impl<'a> From<TerminalView<'a>> for Element<'a, Event, Theme, iced::Renderer> {
+    fn from(widget: TerminalView<'a>) -> Self {
         Self::new(widget)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct TermViewState {
+struct TerminalViewState {
     is_focused: bool,
     is_dragged: bool,
     last_click: Option<mouse::Click>,
@@ -633,8 +630,8 @@ pub struct TermViewState {
     mouse_position_on_grid: TerminalGridPoint,
 }
 
-impl TermViewState {
-    pub fn new() -> Self {
+impl TerminalViewState {
+    fn new() -> Self {
         Self {
             is_focused: true,
             is_dragged: false,
@@ -647,13 +644,13 @@ impl TermViewState {
     }
 }
 
-impl Default for TermViewState {
+impl Default for TerminalViewState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl operation::Focusable for TermViewState {
+impl operation::Focusable for TerminalViewState {
     fn is_focused(&self) -> bool {
         self.is_focused
     }
@@ -677,14 +674,14 @@ mod tests {
 
         #[test]
         fn handles_mouse_mode_with_left_click() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let terminal_mode = TermMode::MOUSE_MODE;
             let layout_position = Point { x: 5.0, y: 5.0 };
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
             let _modifiers = Modifiers::empty();
 
-            TermView::handle_left_button_pressed(
+            TerminalView::handle_left_button_pressed(
                 &mut state,
                 &terminal_mode,
                 cursor_position,
@@ -721,11 +718,11 @@ mod tests {
             ];
 
             for _selection_type in cases {
-                let mut state = TermViewState::new();
+                let mut state = TerminalViewState::new();
                 state.keyboard_modifiers = Modifiers::SHIFT;
                 let mut commands = Vec::new();
 
-                TermView::handle_left_button_pressed(
+                TerminalView::handle_left_button_pressed(
                     &mut state,
                     &terminal_mode,
                     cursor_position,
@@ -755,7 +752,7 @@ mod tests {
 
         #[test]
         fn updates_mouse_position_on_grid() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let terminal_content = RenderableContent::default();
             let mut commands = Vec::new();
             let cases = vec![
@@ -802,7 +799,7 @@ mod tests {
             ];
 
             for (layout_position, cursor_position, expected) in cases {
-                TermView::handle_cursor_moved(
+                TerminalView::handle_cursor_moved(
                     &mut state,
                     &terminal_content,
                     cursor_position,
@@ -816,14 +813,14 @@ mod tests {
 
         #[test]
         fn generates_drag_update_command_when_dragged() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             state.is_dragged = true; // Simulate an ongoing drag operation
             let terminal_content = RenderableContent::default();
             let layout_position = Point { x: 5.0, y: 5.0 };
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
 
-            TermView::handle_cursor_moved(
+            TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
                 cursor_position,
@@ -842,7 +839,7 @@ mod tests {
 
         #[test]
         fn generates_drag_update_command_when_dragged_in_mouse_motion_mode() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
             terminal_content.terminal_mode = TermMode::MOUSE_MOTION;
@@ -851,7 +848,7 @@ mod tests {
             let mut commands = Vec::new();
             let _modifiers = Modifiers::empty();
 
-            TermView::handle_cursor_moved(
+            TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
                 cursor_position,
@@ -877,7 +874,7 @@ mod tests {
         #[test]
         fn generates_drag_update_command_when_dragged_in_srg_mode_with_key_mods(
         ) {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             state.keyboard_modifiers = Modifiers::SHIFT;
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
@@ -886,7 +883,7 @@ mod tests {
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
 
-            TermView::handle_cursor_moved(
+            TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
                 cursor_position,
@@ -905,7 +902,7 @@ mod tests {
 
         #[test]
         fn generates_drag_update_and_link_open() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             state.keyboard_modifiers = Modifiers::COMMAND;
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
@@ -914,7 +911,7 @@ mod tests {
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
 
-            TermView::handle_cursor_moved(
+            TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
                 cursor_position,
@@ -948,13 +945,13 @@ mod tests {
 
         #[test]
         fn mouse_mode_activated() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let terminal_mode = TermMode::MOUSE_MODE;
             let bindings = BindingsLayout::new();
             let mut commands = Vec::new();
             let _modifiers = Modifiers::empty();
 
-            TermView::handle_button_released(
+            TerminalView::handle_button_released(
                 &mut state,
                 &terminal_mode,
                 &bindings,
@@ -978,14 +975,14 @@ mod tests {
 
         #[test]
         fn link_open_on_button_release() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             state.keyboard_modifiers = Modifiers::COMMAND;
             let terminal_mode = TermMode::MOUSE_MODE;
             let bindings = BindingsLayout::new();
             let mut commands = Vec::new();
             let _modifiers = Modifiers::empty();
 
-            TermView::handle_button_released(
+            TerminalView::handle_button_released(
                 &mut state,
                 &terminal_mode,
                 &bindings,
@@ -1019,7 +1016,7 @@ mod tests {
 
         #[test]
         fn link_open_on_button_release_in_non_mouse_mode() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             state.keyboard_modifiers = Modifiers::COMMAND;
             state.mouse_position_on_grid = TerminalGridPoint {
                 line: Line(4),
@@ -1029,7 +1026,7 @@ mod tests {
             let bindings = BindingsLayout::new();
             let mut commands = Vec::new();
 
-            TermView::handle_button_released(
+            TerminalView::handle_button_released(
                 &mut state,
                 &terminal_mode,
                 &bindings,
@@ -1057,14 +1054,14 @@ mod tests {
 
         #[test]
         fn scroll_with_lines_downward() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
-            TermView::handle_wheel_scrolled(
+            TerminalView::handle_wheel_scrolled(
                 &mut state,
                 ScrollDelta::Lines { y: 3.0, x: 0.0 }, // Scroll down 3 lines
-                &font.measure(),
+                &font.measure,
                 &mut commands,
             );
 
@@ -1077,14 +1074,14 @@ mod tests {
 
         #[test]
         fn scroll_with_lines_upward() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
-            TermView::handle_wheel_scrolled(
+            TerminalView::handle_wheel_scrolled(
                 &mut state,
                 ScrollDelta::Lines { y: -2.0, x: 0.0 },
-                &font.measure(),
+                &font.measure,
                 &mut commands,
             );
 
@@ -1097,14 +1094,14 @@ mod tests {
 
         #[test]
         fn scroll_with_pixels_accumulating_downward() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
-            TermView::handle_wheel_scrolled(
+            TerminalView::handle_wheel_scrolled(
                 &mut state,
                 ScrollDelta::Pixels { y: 45.0, x: 0.0 },
-                &font.measure(),
+                &font.measure,
                 &mut commands,
             );
 
@@ -1118,14 +1115,14 @@ mod tests {
 
         #[test]
         fn scroll_with_pixels_accumulating_upward() {
-            let mut state = TermViewState::new();
+            let mut state = TerminalViewState::new();
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
-            TermView::handle_wheel_scrolled(
+            TerminalView::handle_wheel_scrolled(
                 &mut state,
                 ScrollDelta::Pixels { y: -60.0, x: 0.0 },
-                &font.measure(),
+                &font.measure,
                 &mut commands,
             );
 

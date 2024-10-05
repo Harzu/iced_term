@@ -4,7 +4,7 @@ use iced::widget::{button, container, responsive, row, text};
 use iced::Task;
 use iced::{alignment, Font};
 use iced::{window, Color, Element, Length, Size, Subscription};
-use iced_term::{term_view, TermView};
+use iced_term::TerminalView;
 use std::collections::HashMap;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
@@ -95,7 +95,7 @@ impl App {
                     self.panes_created as u64,
                     self.term_settings.clone(),
                 );
-                let command = TermView::focus(tab.widget_id());
+                let command = TerminalView::focus(tab.widget_id());
                 self.tabs.insert(self.panes_created as u64, tab);
 
                 if let Some((pane, _)) = result {
@@ -111,7 +111,7 @@ impl App {
                     self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
 
                 self.focus = Some(pane);
-                return TermView::focus(new_focused_tab.widget_id());
+                return TerminalView::focus(new_focused_tab.widget_id());
             },
             Event::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
@@ -128,7 +128,7 @@ impl App {
                         .get_mut(&(new_focused_pane.id as u64))
                         .unwrap();
 
-                    return TermView::focus(new_focused_tab.widget_id());
+                    return TerminalView::focus(new_focused_tab.widget_id());
                 } else {
                     return window::get_latest().and_then(window::close);
                 }
@@ -241,7 +241,7 @@ fn view_content(
     tabs: &HashMap<u64, iced_term::Terminal>,
 ) -> Element<'_, Event> {
     let tab = tabs.get(&pane_id).expect("tab with target id not found");
-    container(term_view(tab).map(Event::Terminal))
+    container(TerminalView::new(tab).map(Event::Terminal))
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(5)

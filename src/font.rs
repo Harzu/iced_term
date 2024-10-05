@@ -9,10 +9,10 @@ use iced_graphics::text::paragraph;
 
 #[derive(Debug, Clone)]
 pub struct TermFont {
-    size: f32,
-    font_type: Font,
-    scale_factor: f32,
-    measure: Size<f32>,
+    pub(crate) size: f32,
+    pub(crate) font_type: Font,
+    pub(crate) scale_factor: f32,
+    pub(crate) measure: Size<f32>,
 }
 
 impl TermFont {
@@ -27,22 +27,6 @@ impl TermFont {
                 settings.font_type,
             ),
         }
-    }
-
-    pub fn size(&self) -> f32 {
-        self.size
-    }
-
-    pub fn font_type(&self) -> Font {
-        self.font_type
-    }
-
-    pub fn measure(&self) -> Size<f32> {
-        self.measure
-    }
-
-    pub fn scale_factor(&self) -> f32 {
-        self.scale_factor
     }
 }
 
