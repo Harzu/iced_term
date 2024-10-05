@@ -227,7 +227,7 @@ You can also look at [examples](./examples) directory for more information about
 ## Dependencies
 
  - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
- - [alacritty_terminal (custom commit)](https://github.com/zed-industries/zed/pull/12687/files)
+ - [alacritty_terminal (0.24.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
  - [tokio (1.40.0)](https://github.com/tokio-rs/tokio)
 
 ## Contributing / Feedback
