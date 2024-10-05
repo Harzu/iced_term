@@ -229,3 +229,7 @@ You can also look at [examples](./examples) directory for more information about
  - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
  - [alacritty_terminal (custom commit)](https://github.com/zed-industries/zed/pull/12687/files)
  - [tokio (1.40.0)](https://github.com/tokio-rs/tokio)
+
+## Contributing / Feedback
+
+All feedbacks, issues and pull requests are welcomed! Guidelines is coming soon =)
