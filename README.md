@@ -46,7 +46,7 @@ This widget was tested on MacOS, Linux and Windows (but only under [WSL2](https:
 From crates.io
 
 ```toml
-iced_term = "0.5.0"
+iced_term = "0.5.1"
 ```
 
 From git
@@ -224,11 +224,17 @@ You can also look at [examples](./examples) directory for more information about
 - [themes](./examples/themes/) - The example that show how you can change terminal color scheme.
 - [fonts](./examples/fonts/) - The examples that show how you can change font type or font size in your terminal emulator app.
 
+You can run any example via
+
+```shell
+cargo run --package <example name>
+```
+
 ## Dependencies
 
  - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
- - [alacritty_terminal (0.24.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
- - [tokio (1.40.0)](https://github.com/tokio-rs/tokio)
+ - [alacritty_terminal (0.24.1)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
+ - [tokio (1.41.1)](https://github.com/tokio-rs/tokio)
 
 ## Contributing / Feedback
 

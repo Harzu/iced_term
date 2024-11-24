@@ -44,7 +44,6 @@ impl Subscription {
                             });
                     },
                     None => {
-                        println!("None");
                         if !shutdown {
                             panic!("iced_term stream {}: terminal event channel closed unexpected", term_id);
                         }
