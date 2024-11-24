@@ -57,7 +57,8 @@ impl App {
             },
             theme: iced_term::settings::ThemeSettings::default(),
             backend: iced_term::settings::BackendSettings {
-                shell: env!("SHELL").to_string(),
+                cmd: env!("SHELL").to_string(),
+                ..Default::default()
             },
         };
         let tab = iced_term::Terminal::new(
