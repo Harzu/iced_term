@@ -146,7 +146,7 @@ impl Backend {
         font_size: Size<f32>,
     ) -> Result<Self> {
         let pty_config = tty::Options {
-            shell: Some(tty::Shell::new(settings.shell, vec![])),
+            shell: Some(tty::Shell::new(settings.cmd, settings.args)),
             ..tty::Options::default()
         };
         let config = term::Config::default();
@@ -197,7 +197,17 @@ impl Backend {
                         self.internal_sync(&mut term);
                         action = Action::Redraw;
                     },
+                    Event::ChildExit(_) => {
+                        self.internal_sync(&mut term);
+                        for c in self.last_content.grid.display_iter() {
+                            if c.c != ' ' && c.c != '\t' {
+                                println!("{:?}", c);
+                            }
+                        }
+                        action = Action::Redraw;
+                    }
                     Event::Exit => {
+                        self.internal_sync(&mut term);
                         action = Action::Shutdown;
                     },
                     Event::Title(title) => {

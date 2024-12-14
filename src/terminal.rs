@@ -88,7 +88,7 @@ impl Terminal {
             Command::ProcessBackendCommand(c) => {
                 if let Some(ref mut backend) = self.backend {
                     action = backend.process_command(c);
-                    if action == Action::Redraw {
+                    if action == Action::Redraw || action == Action::Shutdown {
                         self.redraw();
                     }
                 }

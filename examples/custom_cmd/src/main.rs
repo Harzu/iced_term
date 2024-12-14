@@ -1,7 +1,7 @@
 use iced::advanced::graphics::core::Element;
 use iced::font::{Family, Stretch, Weight};
 use iced::widget::container;
-use iced::{window, Font, Length, Size, Subscription, Task, Theme};
+use iced::{Font, Length, Size, Subscription, Task, Theme};
 use iced_term::TerminalView;
 
 fn main() -> iced::Result {
@@ -44,14 +44,14 @@ impl App {
             },
             theme: iced_term::settings::ThemeSettings::default(),
             backend: iced_term::settings::BackendSettings {
-                cmd: system_shell.to_string(),
-                ..Default::default()
+                cmd: "echo".to_string(),
+                args: vec!["101".to_string()]
             },
         };
 
         (
             Self {
-                title: String::from("full_screen"),
+                title: String::from("custom_cmd"),
                 term: iced_term::Terminal::new(term_id, term_settings),
             },
             Task::none(),
@@ -70,12 +70,10 @@ impl App {
     }
 
     fn update(&mut self, event: Event) -> Task<Event> {
+        println!("{:?}", event);
         match event {
             Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
                 match self.term.update(cmd) {
-                    iced_term::actions::Action::Shutdown => {
-                        window::get_latest().and_then(window::close)
-                    },
                     iced_term::actions::Action::ChangeTitle(title) => {
                         self.title = title;
                         Task::none()
