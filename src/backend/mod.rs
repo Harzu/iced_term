@@ -197,7 +197,17 @@ impl Backend {
                         self.internal_sync(&mut term);
                         action = Action::Redraw;
                     },
+                    Event::ChildExit(_) => {
+                        self.internal_sync(&mut term);
+                        for c in self.last_content.grid.display_iter() {
+                            if c.c != ' ' && c.c != '\t' {
+                                println!("{:?}", c);
+                            }
+                        }
+                        action = Action::Redraw;
+                    }
                     Event::Exit => {
+                        self.internal_sync(&mut term);
                         action = Action::Shutdown;
                     },
                     Event::Title(title) => {
