@@ -26,7 +26,7 @@ pub struct TerminalView<'a> {
 }
 
 impl<'a> TerminalView<'a> {
-    pub fn show(term: &'a Terminal) -> Element<'_, Event> {
+    pub fn show(term: &'a Terminal) -> Element<'a, Event> {
         container(Self { term })
             .width(Length::Fill)
             .height(Length::Fill)
@@ -368,7 +368,7 @@ impl<'a> TerminalView<'a> {
     }
 }
 
-impl<'a> Widget<Event, Theme, iced::Renderer> for TerminalView<'a> {
+impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     fn size(&self) -> Size<Length> {
         Size {
             width: Length::Fill,
