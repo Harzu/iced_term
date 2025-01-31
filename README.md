@@ -21,7 +21,7 @@ Terminal emulator widget powered by ICED framework and alacritty terminal backen
 
 ## Unstable widget API
 
-The ICED fraemwork does not have the stable API and this widget is also under development, so I can not promise the stable API and to document it at least while the ICED won't release the 1.0.0 version.
+The ICED framework does not have the stable API and this widget is also under development, so I can not promise the stable API and to document it at least while the ICED won't release the 1.0.0 version.
 
 ## Features
 
