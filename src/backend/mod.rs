@@ -146,7 +146,7 @@ impl Backend {
         font_size: Size<f32>,
     ) -> Result<Self> {
         let pty_config = tty::Options {
-            shell: Some(tty::Shell::new(settings.shell, vec![])),
+            shell: Some(tty::Shell::new(settings.program, settings.args)),
             ..tty::Options::default()
         };
         let config = term::Config::default();
