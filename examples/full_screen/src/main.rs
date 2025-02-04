@@ -43,10 +43,10 @@ impl App {
                 ..Default::default()
             },
             theme: iced_term::settings::ThemeSettings::default(),
-            backend: iced_term::settings::BackendSettings::new(
-                system_shell,
-                vec![],
-            ),
+            backend: iced_term::settings::BackendSettings {
+                program: system_shell,
+                ..Default::default()
+            },
         };
 
         (

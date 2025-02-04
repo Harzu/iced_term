@@ -20,12 +20,6 @@ pub struct BackendSettings {
     pub args: Vec<String>,
 }
 
-impl BackendSettings {
-    pub fn new(program: String, args: Vec<String>) -> Self {
-        Self { program, args }
-    }
-}
-
 impl Default for BackendSettings {
     fn default() -> Self {
         Self {

@@ -56,12 +56,12 @@ impl App {
                 ..Default::default()
             },
             theme: iced_term::settings::ThemeSettings::default(),
-            backend: iced_term::settings::BackendSettings::new(
-                std::env::var("SHELL")
+            backend: iced_term::settings::BackendSettings {
+                program: std::env::var("SHELL")
                     .expect("SHELL variable is not defined")
                     .to_string(),
-                vec![],
-            ),
+                ..Default::default()
+            },
         };
         let tab = iced_term::Terminal::new(
             initial_pane_id as u64,
