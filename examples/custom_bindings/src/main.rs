@@ -54,7 +54,8 @@ impl App {
             },
             theme: iced_term::settings::ThemeSettings::default(),
             backend: iced_term::settings::BackendSettings {
-                shell: system_shell.to_string(),
+                program: system_shell,
+                ..Default::default()
             },
         };
 
