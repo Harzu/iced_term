@@ -449,7 +449,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                         if indexed.cell.flags.contains(cell::Flags::INVERSE)
                             || content
                                 .selectable_range
-                                .map_or(false, |r| r.contains(indexed.point))
+                                .is_some_and(|r| r.contains(indexed.point))
                         {
                             std::mem::swap(&mut fg, &mut bg);
                         }
@@ -462,8 +462,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                         frame.fill(&background, bg);
 
                         // Draw hovered hyperlink underline
-                        if content.hovered_hyperlink.as_ref().map_or(
-                            false,
+                        if content.hovered_hyperlink.as_ref().is_some_and(
                             |range| {
                                 range.contains(&indexed.point)
                                     && range
@@ -487,7 +486,11 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                         }
 
                         // Handle cursor rendering
-                        if content.grid.cursor.point == indexed.point {
+                        if content.grid.cursor.point == indexed.point
+                            && content
+                                .terminal_mode
+                                .contains(TermMode::SHOW_CURSOR)
+                        {
                             let cursor_color =
                                 self.term.theme.get_color(content.cursor.fg);
                             let cursor_rect =
