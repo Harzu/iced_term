@@ -233,7 +233,7 @@ cargo run --package <example name>
 ## Dependencies
 
  - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
- - [alacritty_terminal (0.24.1)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
+ - [alacritty_terminal (0.25.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
  - [tokio (1.41.1)](https://github.com/tokio-rs/tokio)
 
 ## Contributing / Feedback
