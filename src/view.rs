@@ -7,11 +7,12 @@ use crate::theme::TerminalStyle;
 use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
+use alacritty_terminal::vte::ansi::{self as ansi, NamedColor};
 use iced::alignment::{Horizontal, Vertical};
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Path, Text};
 use iced::widget::container;
-use iced::{Element, Length, Point, Rectangle, Size, Theme};
+use iced::{Color, Element, Length, Point, Rectangle, Size, Theme};
 use iced_core::clipboard::Kind as ClipboardKind;
 use iced_core::keyboard::{Key, Modifiers};
 use iced_core::mouse::{self, Click};
@@ -19,7 +20,7 @@ use iced_core::text::{LineHeight, Shaping};
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
-use iced_graphics::geometry::Stroke;
+use iced_graphics::geometry::{Frame, Renderer, Stroke};
 
 pub struct TerminalView<'a> {
     term: &'a Terminal,
@@ -427,106 +428,141 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
             let layout_offset_x = layout.position().x;
             let layout_offset_y = layout.position().y;
 
-            let geom =
-                self.term.cache.draw(renderer, viewport.size(), |frame| {
-                    for indexed in content.grid.display_iter() {
-                        let x = layout_offset_x
-                            + (indexed.point.column.0 as f32 * cell_width);
-                        let y = layout_offset_y
-                            + ((indexed.point.line.0 as f32
-                                + content.grid.display_offset() as f32)
-                                * cell_height);
+            let geom = self.term.cache.draw(renderer, viewport.size(), |frame| {
+                // Precompute constants used in the inner loop
+                let display_offset = content.grid.display_offset() as f32;
+                let cell_size = Size::new(cell_width, cell_height);
+                let half_w = cell_width * 0.5;
+                let half_h = cell_height * 0.5;
+                let default_bg = self
+                    .term
+                    .theme
+                    .get_color(ansi::Color::Named(NamedColor::Background));
 
-                        let mut fg = self.term.theme.get_color(indexed.fg);
-                        let mut bg = self.term.theme.get_color(indexed.bg);
+                // Track per-line background runs to reduce draw calls
+                let mut bg_batch = BackgroundRectBatch::new(
+                    display_offset, cell_height, layout_offset_y,
+                );
 
-                        // Handle dim, inverse, and selected text
-                        if indexed.cell.flags.intersects(
-                            cell::Flags::DIM | cell::Flags::DIM_BOLD,
-                        ) {
-                            fg.a *= 0.7;
+                for indexed in content.grid.display_iter() {
+                    // Compute per-cell geometry cheaply
+                    let line = indexed.point.line.0 as i32;
+                    let col = indexed.point.column.0 as f32;
+
+                    // If the new line was detected,
+                    // need to flush pending background batch and start the new one
+                    if bg_batch.line != Some(line) {
+                        if bg_batch.is_active && bg_batch.width > 0.0 {
+                            let line = bg_batch.line.unwrap_or(line);
+                            frame.fill(&bg_batch.flush_rect(line), bg_batch.color);
                         }
-                        if indexed.cell.flags.contains(cell::Flags::INVERSE)
-                            || content
-                                .selectable_range
-                                .is_some_and(|r| r.contains(indexed.point))
-                        {
-                            std::mem::swap(&mut fg, &mut bg);
-                        }
-
-                        let cell_size = Size::new(cell_width, cell_height);
-
-                        // Draw cell background
-                        let background =
-                            Path::rectangle(Point::new(x, y), cell_size);
-                        frame.fill(&background, bg);
-
-                        // Draw hovered hyperlink underline
-                        if content.hovered_hyperlink.as_ref().is_some_and(
-                            |range| {
-                                range.contains(&indexed.point)
-                                    && range
-                                        .contains(&state.mouse_position_on_grid)
-                            },
-                        ) {
-                            let underline_height = y + cell_size.height;
-                            let underline = Path::line(
-                                Point::new(x, underline_height),
-                                Point::new(
-                                    x + cell_size.width,
-                                    underline_height,
-                                ),
-                            );
-                            frame.stroke(
-                                &underline,
-                                Stroke::default()
-                                    .with_width(font_size * 0.15)
-                                    .with_color(fg),
-                            );
-                        }
-
-                        // Handle cursor rendering
-                        if content.grid.cursor.point == indexed.point
-                            && content
-                                .terminal_mode
-                                .contains(TermMode::SHOW_CURSOR)
-                        {
-                            let cursor_color =
-                                self.term.theme.get_color(content.cursor.fg);
-                            let cursor_rect =
-                                Path::rectangle(Point::new(x, y), cell_size);
-                            frame.fill(&cursor_rect, cursor_color);
-                        }
-
-                        // Draw text
-                        if indexed.c != ' ' && indexed.c != '\t' {
-                            if content.grid.cursor.point == indexed.point
-                                && content
-                                    .terminal_mode
-                                    .contains(TermMode::APP_CURSOR)
-                            {
-                                fg = bg;
-                            }
-                            let text = Text {
-                                content: indexed.c.to_string(),
-                                position: Point::new(
-                                    x + (cell_size.width / 2.0),
-                                    y + (cell_size.height / 2.0),
-                                ),
-                                font: self.term.font.font_type,
-                                size: iced_core::Pixels(font_size),
-                                color: fg,
-                                horizontal_alignment: Horizontal::Center,
-                                vertical_alignment: Vertical::Center,
-                                shaping: Shaping::Advanced,
-                                line_height: LineHeight::Relative(
-                                    font_scale_factor,
-                                ),
-                            };
-                            frame.fill_text(text);
-                        }
+                        bg_batch.is_active = false;
+                        bg_batch.width = 0.0;
+                        bg_batch.line = Some(line);
                     }
-                });
+
+                    // Resolve position point for this cell
+                    let x = layout_offset_x + (col * cell_width);
+                    let y = layout_offset_y
+                        + (((line as f32) + display_offset) * cell_height);
+                    let cell_center_y = y + half_h;
+                    let cell_center_x = x + half_w;
+
+                    // Resolve colors for this cell
+                    let mut fg = self.term.theme.get_color(indexed.fg);
+                    let mut bg = self.term.theme.get_color(indexed.bg);
+
+                    // Handle dim, inverse, and selected text
+                    if indexed
+                        .cell
+                        .flags
+                        .intersects(cell::Flags::DIM | cell::Flags::DIM_BOLD)
+                    {
+                        fg.a *= 0.7;
+                    }
+                    if indexed.cell.flags.contains(cell::Flags::INVERSE)
+                        || content
+                            .selectable_range
+                            .is_some_and(|r| r.contains(indexed.point))
+                    {
+                        std::mem::swap(&mut fg, &mut bg);
+                    }
+
+                    // Batch draw backgrounds: skip default background (container already paints it)
+                    if bg != default_bg {
+                        if bg_batch.need_extend(bg, x) {
+                            bg_batch.width += cell_width;
+                        } else {
+                            // New run
+                            if bg_batch.is_active && bg_batch.width > 0.0 {
+                                frame.fill(&bg_batch.flush_rect(line), bg_batch.color);
+                            }
+                            bg_batch.is_active = true;
+                            bg_batch.color = bg;
+                            bg_batch.start_x = x;
+                            bg_batch.width = cell_width;
+                        }
+                    } else if bg_batch.is_active {
+                        // Background returns to default, flush current run
+                        frame.fill(&bg_batch.flush_rect(line), bg_batch.color);
+                        bg_batch.is_active = false;
+                        bg_batch.width = 0.0;
+                    }
+
+                    // Draw hovered hyperlink underline (rare; keep per-cell for correctness)
+                    if content.hovered_hyperlink.as_ref().is_some_and(|range| {
+                        range.contains(&indexed.point)
+                            && range.contains(&state.mouse_position_on_grid)
+                    }) {
+                        let underline_height = y + cell_size.height;
+                        let underline = Path::line(
+                            Point::new(x, underline_height),
+                            Point::new(x + cell_size.width, underline_height),
+                        );
+                        frame.stroke(
+                            &underline,
+                            Stroke::default()
+                                .with_width(font_size * 0.15)
+                                .with_color(fg),
+                        );
+                    }
+
+                    // Handle cursor rendering
+                    if content.grid.cursor.point == indexed.point
+                        && content.terminal_mode.contains(TermMode::SHOW_CURSOR)
+                    {
+                        let cursor_color =
+                            self.term.theme.get_color(content.cursor.fg);
+                        let cursor_rect = Path::rectangle(Point::new(x, y), cell_size);
+                        frame.fill(&cursor_rect, cursor_color);
+                    }
+
+                    // Draw text
+                    if indexed.c != ' ' && indexed.c != '\t' {
+                        if content.grid.cursor.point == indexed.point
+                            && content.terminal_mode.contains(TermMode::APP_CURSOR)
+                        {
+                            fg = bg;
+                        }
+                        let text = Text {
+                            content: indexed.c.to_string(),
+                            position: Point::new(cell_center_x, cell_center_y),
+                            font: self.term.font.font_type,
+                            size: iced_core::Pixels(font_size),
+                            color: fg,
+                            horizontal_alignment: Horizontal::Center,
+                            vertical_alignment: Vertical::Center,
+                            shaping: Shaping::Advanced,
+                            line_height: LineHeight::Relative(font_scale_factor),
+                        };
+                        frame.fill_text(text);
+                    }
+                }
+
+                // Flush any remaining background run at the end
+                let rect = bg_batch.flush_rect(bg_batch.line.unwrap_or(0));
+                frame.fill(&rect, bg_batch.color);
+            });
 
             use iced::advanced::graphics::geometry::Renderer as _;
             renderer.draw_geometry(geom);
@@ -664,6 +700,45 @@ impl operation::Focusable for TerminalViewState {
 
     fn unfocus(&mut self) {
         self.is_focused = false;
+    }
+}
+
+#[derive(Default)]
+struct BackgroundRectBatch {
+    display_offset: f32,
+    cell_height: f32,
+    layout_offset_y: f32,
+    line: Option<i32>,
+    is_active: bool,
+    color: Color,
+    start_x: f32,
+    width: f32
+}
+
+impl BackgroundRectBatch {
+    fn new(
+        display_offset: f32,
+        cell_height: f32,
+        layout_offset_y: f32,
+    ) -> Self {
+        Self {
+            display_offset,
+            cell_height,
+            layout_offset_y,
+            ..Default::default()
+        }
+    }
+
+    fn flush_rect(&self, line: i32) -> Path {
+        let flush_y = self.layout_offset_y + ((line as f32 + self.display_offset) * self.cell_height);
+        Path::rectangle(
+                Point::new(self.start_x, flush_y),
+                Size::new(self.width, self.cell_height),
+        )
+    }
+
+    fn need_extend(&self, bg: Color, x: f32) -> bool {
+        self.is_active && bg == self.color && (self.start_x + self.width - x).abs() < f32::EPSILON
     }
 }
 
