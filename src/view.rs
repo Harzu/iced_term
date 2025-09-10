@@ -61,12 +61,12 @@ impl<'a> TerminalView<'a> {
     }
 
     fn is_cursor_hovered_hyperlink(&self, state: &TerminalViewState) -> bool {
-        if let Some(ref backend) = self.term.backend {
-            let content = backend.renderable_content();
+        // if let Some(ref backend) = self.term.backend {
+            let content = self.term.backend.renderable_content();
             if let Some(hyperlink_range) = &content.hovered_hyperlink {
                 return hyperlink_range.contains(&state.mouse_position_on_grid);
             }
-        }
+        // }
 
         false
     }
@@ -79,8 +79,8 @@ impl<'a> TerminalView<'a> {
         event: iced::mouse::Event,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
-        if let Some(backend) = &self.term.backend {
-            let terminal_content = backend.renderable_content();
+        // if let Some(backend) = &self.term.backend {
+            let terminal_content = self.term.backend.renderable_content();
             let terminal_mode = terminal_content.terminal_mode;
 
             match event {
@@ -98,7 +98,7 @@ impl<'a> TerminalView<'a> {
                 iced_core::mouse::Event::CursorMoved { position } => {
                     Self::handle_cursor_moved(
                         state,
-                        backend.renderable_content(),
+                        self.term.backend.renderable_content(),
                         position,
                         layout_position,
                         &mut commands,
@@ -124,7 +124,7 @@ impl<'a> TerminalView<'a> {
                 },
                 _ => {},
             }
-        }
+        // }
 
         commands
     }
@@ -279,9 +279,9 @@ impl<'a> TerminalView<'a> {
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         event: iced::keyboard::Event,
     ) -> Option<Command> {
-        if let Some(ref backend) = &self.term.backend {
+        // if let Some(ref backend) = &self.term.backend {
             let mut binding_action = BindingAction::Ignore;
-            let last_content = backend.renderable_content();
+            let last_content = self.term.backend.renderable_content();
             match event {
                 iced::keyboard::Event::ModifiersChanged(m) => {
                     state.keyboard_modifiers = m;
@@ -358,12 +358,12 @@ impl<'a> TerminalView<'a> {
                 BindingAction::Copy => {
                     clipboard.write(
                         ClipboardKind::Standard,
-                        backend.selectable_content(),
+                        self.term.backend.selectable_content(),
                     );
                 },
                 _ => {},
             };
-        }
+        // }
 
         None
     }
@@ -417,9 +417,9 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        if let Some(ref backend) = &self.term.backend {
+        // if let Some(ref backend) = &self.term.backend {
             let state = tree.state.downcast_ref::<TerminalViewState>();
-            let content = backend.renderable_content();
+            let content = self.term.backend.renderable_content();
             let term_size = content.terminal_size;
             let cell_width = term_size.cell_width as f32;
             let cell_height = term_size.cell_height as f32;
@@ -611,7 +611,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
 
             use iced::advanced::graphics::geometry::Renderer as _;
             renderer.draw_geometry(geom);
-        }
+        // }
     }
 
     fn on_event(
@@ -627,11 +627,11 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     ) -> iced::event::Status {
         let state = tree.state.downcast_mut::<TerminalViewState>();
         let layout_size = layout.bounds().size();
-        if state.size != layout_size && self.term.backend.is_some() {
+        if state.size != layout_size {
             state.size = layout_size;
             let cmd = Command::ProcessBackendCommand(BackendCommand::Resize(
                 Some(layout_size),
-                None,
+                Some(self.term.font.measure),
             ));
             shell.publish(Event::CommandReceived(self.term.id, cmd));
         }
@@ -680,9 +680,9 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         let state = tree.state.downcast_ref::<TerminalViewState>();
         let mut cursor_mode = iced_core::mouse::Interaction::Idle;
         let mut terminal_mode = TermMode::empty();
-        if let Some(ref backend) = &self.term.backend {
-            terminal_mode = backend.renderable_content().terminal_mode;
-        }
+        // if let Some(ref backend) = &self.term.backend {
+            terminal_mode = self.term.backend.renderable_content().terminal_mode;
+        // }
         if self.is_cursor_in_layout(cursor, layout)
             && !terminal_mode.contains(TermMode::SGR_MOUSE)
         {

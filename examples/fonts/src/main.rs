@@ -19,6 +19,8 @@ fn main() -> iced::Result {
             height: 720.0,
         })
         .subscription(App::subscription)
+        .font(TERM_FONT_JET_BRAINS_BYTES)
+        .font(TERM_FONT_3270_BYTES)
         .run_with(App::new)
 }
 
@@ -67,11 +69,7 @@ impl App {
                 term: iced_term::Terminal::new(term_id, term_settings.clone()),
                 font_setting: term_settings.font,
             },
-            Task::batch(vec![
-                iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
-                    .map(Event::FontLoaded),
-                iced::font::load(TERM_FONT_3270_BYTES).map(Event::FontLoaded),
-            ]),
+            Task::none(),
         )
     }
 

@@ -1,4 +1,3 @@
-// pub mod settings;
 use crate::actions::Action;
 use crate::settings::BackendSettings;
 use alacritty_terminal::event::{
@@ -21,7 +20,9 @@ use std::cmp::min;
 use std::io::Result;
 use std::ops::{Index, RangeInclusive};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+// use std::sync::mpsc;
+use crossbeam_channel::Sender;
+// use tokio::sync::mpsc;
 
 #[derive(Debug, Clone)]
 pub enum BackendCommand {
@@ -141,7 +142,7 @@ pub struct Backend {
 impl Backend {
     pub fn new(
         id: u64,
-        event_sender: mpsc::Sender<Event>,
+        pty_event_proxy_sender: Sender<Event>,
         settings: BackendSettings,
         font_size: Size<f32>,
     ) -> Result<Self> {
@@ -157,7 +158,7 @@ impl Backend {
         };
 
         let pty = tty::new(&pty_config, terminal_size.into(), id)?;
-        let event_proxy = EventProxy(event_sender);
+        let event_proxy = EventProxy(id, pty_event_proxy_sender);
 
         let mut term = Term::new(config, &terminal_size, event_proxy.clone());
         let cursor = term.grid_mut().cursor_cell().clone();
@@ -186,10 +187,11 @@ impl Backend {
         })
     }
 
-    pub fn process_command(&mut self, cmd: BackendCommand) -> Action {
+    pub fn handle(&mut self, cmd: BackendCommand) -> Action {
         let mut action = Action::Ignore;
         let term = self.term.clone();
         let mut term = term.lock();
+        println!("backend: {:?}", cmd);
         match cmd {
             BackendCommand::ProcessAlacrittyEvent(event) => {
                 match event {
@@ -203,6 +205,7 @@ impl Backend {
                     Event::Title(title) => {
                         action = Action::ChangeTitle(title);
                     },
+                    Event::PtyWrite(pty) => self.notifier.notify(pty.into_bytes()),
                     _ => {},
                 };
             },
@@ -588,10 +591,13 @@ impl Drop for Backend {
 }
 
 #[derive(Clone)]
-pub struct EventProxy(mpsc::Sender<Event>);
+pub struct EventProxy(u64, Sender<Event>);
 
 impl EventListener for EventProxy {
     fn send_event(&self, event: Event) {
-        let _ = self.0.blocking_send(event);
+        let _ = self
+            .1
+            .send(event)
+            .unwrap_or_else(|_| { panic!("failed to process event proxy for pty with id: {}", self.0) });
     }
 }

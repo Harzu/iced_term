@@ -1,8 +1,12 @@
 use iced::advanced::graphics::core::Element;
-use iced::font::{Family, Stretch, Weight};
+use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{window, Font, Length, Size, Subscription, Task, Theme};
 use iced_term::TerminalView;
+
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 fn main() -> iced::Result {
     iced::application(App::title, App::update, App::view)
@@ -12,11 +16,13 @@ fn main() -> iced::Result {
             height: 720.0,
         })
         .subscription(App::subscription)
+        .font(TERM_FONT_JET_BRAINS_BYTES)
         .run_with(App::new)
 }
 
 #[derive(Debug, Clone)]
 pub enum Event {
+    Ready,
     Terminal(iced_term::Event),
 }
 
@@ -37,8 +43,7 @@ impl App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrainsMono Nerd Font Mono"),
-                    stretch: Stretch::Normal,
-                    ..Default::default()
+                    ..Font::default()
                 },
                 ..Default::default()
             },
@@ -52,9 +57,9 @@ impl App {
         (
             Self {
                 title: String::from("full_screen"),
-                term: iced_term::Terminal::new(term_id, term_settings),
+                term: iced_term::Terminal::new(term_id, term_settings).unwrap(),
             },
-            Task::none(),
+            Task::none()
         )
     }
 
@@ -63,26 +68,29 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Event> {
-        let term_subscription = iced_term::Subscription::new(self.term.id);
+        let term_subscription = iced_term::Subscription::new(self.term.id, self.term.backend_event_rx());
         let term_event_stream = term_subscription.event_stream();
         Subscription::run_with_id(self.term.id, term_event_stream)
             .map(Event::Terminal)
     }
 
     fn update(&mut self, event: Event) -> Task<Event> {
+                        println!("app {:?}", event);
+
         match event {
+            Event::Ready => Task::none(),
             Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
-                match self.term.update(cmd) {
+                match self.term.handle(cmd) {
                     iced_term::actions::Action::Shutdown => {
                         window::get_latest().and_then(window::close)
                     },
                     iced_term::actions::Action::ChangeTitle(title) => {
                         self.title = title;
                         Task::none()
-                    },
-                    _ => Task::none(),
+                    }
+                    _ => Task::none()
                 }
-            },
+            }
         }
     }
 

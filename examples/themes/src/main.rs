@@ -80,11 +80,11 @@ impl App {
         match event {
             Event::FontLoaded(_) => Task::none(),
             Event::ThemeChanged(palette) => {
-                self.term.update(iced_term::Command::ChangeTheme(palette));
+                self.term.process_command(iced_term::Command::ChangeTheme(palette));
                 Task::none()
             },
             Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
-                match self.term.update(cmd) {
+                match self.term.process_command(cmd) {
                     iced_term::actions::Action::Shutdown => {
                         window::get_latest().and_then(window::close)
                     },
