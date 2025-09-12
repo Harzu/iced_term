@@ -46,7 +46,7 @@ This widget was tested on MacOS, Linux and Windows (but only under [WSL2](https:
 From crates.io
 
 ```toml
-iced_term = "0.5.1"
+iced_term = "0.6.0"
 ```
 
 From git
@@ -234,7 +234,7 @@ cargo run --package <example name>
 
  - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
  - [alacritty_terminal (0.25.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
- - [tokio (1.41.1)](https://github.com/tokio-rs/tokio)
+ - [tokio (1.47.1)](https://github.com/tokio-rs/tokio)
 
 ## Contributing / Feedback
 

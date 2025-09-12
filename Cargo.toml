@@ -21,8 +21,8 @@ iced = { version = "0.13.1", features = [
     "lazy",
     "advanced",
 ] }
-tokio = { version = "1.41.1", features = ["full"] }
+tokio = { version = "1.47.1", features = ["full"] }
 iced_graphics = "0.13.0"
 iced_core = "0.13.2"
-open = "5.3.1"
-anyhow = "1.0.93"
+open = "5.3.2"
+anyhow = "1.0.99"
