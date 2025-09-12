@@ -19,13 +19,14 @@ fn main() -> iced::Result {
             height: 720.0,
         })
         .subscription(App::subscription)
+        .font(TERM_FONT_JET_BRAINS_BYTES)
+        .font(TERM_FONT_3270_BYTES)
         .run_with(App::new)
 }
 
 #[derive(Debug, Clone)]
 pub enum Event {
     Terminal(iced_term::Event),
-    FontLoaded(Result<(), iced::font::Error>),
     FontChanged(String),
     FontSizeInc,
     FontSizeDec,
@@ -64,14 +65,11 @@ impl App {
         (
             Self {
                 title: String::from("fonts"),
-                term: iced_term::Terminal::new(term_id, term_settings.clone()),
+                term: iced_term::Terminal::new(term_id, term_settings.clone())
+                    .expect("failed to create the new terminal instance"),
                 font_setting: term_settings.font,
             },
-            Task::batch(vec![
-                iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
-                    .map(Event::FontLoaded),
-                iced::font::load(TERM_FONT_3270_BYTES).map(Event::FontLoaded),
-            ]),
+            Task::none(),
         )
     }
 
@@ -80,15 +78,12 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Event> {
-        let term_subscription = iced_term::Subscription::new(self.term.id);
-        let term_event_stream = term_subscription.event_stream();
-        Subscription::run_with_id(self.term.id, term_event_stream)
+        Subscription::run_with_id(self.term.id, self.term.subscription())
             .map(Event::Terminal)
     }
 
     fn update(&mut self, event: Event) -> Task<Event> {
         match event {
-            Event::FontLoaded(_) => Task::none(),
             Event::FontChanged(name) => {
                 if name.as_str() == "3270" {
                     self.font_setting.font_type = Font {
@@ -104,40 +99,39 @@ impl App {
                     };
                 };
 
-                self.term.update(iced_term::Command::ChangeFont(
+                self.term.handle(iced_term::Command::ChangeFont(
                     self.font_setting.clone(),
                 ));
-                Task::none()
             },
             Event::FontSizeInc => {
                 self.font_setting.size += 1.0;
-                self.term.update(iced_term::Command::ChangeFont(
+                self.term.handle(iced_term::Command::ChangeFont(
                     self.font_setting.clone(),
                 ));
-                Task::none()
             },
             Event::FontSizeDec => {
                 if self.font_setting.size > 0.0 {
                     self.font_setting.size -= 1.0;
-                    self.term.update(iced_term::Command::ChangeFont(
+                    self.term.handle(iced_term::Command::ChangeFont(
                         self.font_setting.clone(),
                     ));
                 }
-                Task::none()
             },
-            Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
-                match self.term.update(cmd) {
+            Event::Terminal(iced_term::Event::BackendCall(_, cmd)) => {
+                match self.term.handle(iced_term::Command::ProxyToBackend(cmd))
+                {
                     iced_term::actions::Action::Shutdown => {
-                        window::get_latest().and_then(window::close)
+                        return window::get_latest().and_then(window::close)
                     },
                     iced_term::actions::Action::ChangeTitle(title) => {
                         self.title = title;
-                        Task::none()
                     },
-                    _ => Task::none(),
+                    _ => {},
                 }
             },
         }
+
+        Task::none()
     }
 
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {

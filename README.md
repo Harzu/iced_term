@@ -27,7 +27,7 @@ The ICED framework does not have the stable API and this widget is also under de
 
 The widget is currently under development and does not provide full terminal features make sure that widget is covered everything you want.
 
-- PTY content rendering
+- PTY content rendering ([msgcat --color=test](./docs/colortest))
 - Multiple instance support
 - Basic keyboard input
 - Mouse interaction in different modes
@@ -46,7 +46,7 @@ This widget was tested on MacOS, Linux and Windows (but only under [WSL2](https:
 From crates.io
 
 ```toml
-iced_term = "0.5.1"
+iced_term = "0.6.0"
 ```
 
 From git
@@ -63,11 +63,10 @@ Interacting with the widget is happened via:
 ```rust
 #[derive(Debug, Clone)]
 pub enum Command {
-    InitBackend(Sender<AlacrittyEvent>),
     ChangeTheme(Box<ColorPalette>),
     ChangeFont(FontSettings),
     AddBindings(Vec<(Binding<InputKind>, BindingAction)>),
-    ProcessBackendCommand(BackendCommand),
+    ProxyToBackend(backend::Command),
 }
 ```
 
@@ -76,7 +75,7 @@ pub enum Command {
 ```rust
 #[derive(Debug, Clone)]
 pub enum Event {
-    CommandReceived(u64, Command),
+    BackendCall(u64, backend::Command),
 }
 ```
 
@@ -85,11 +84,11 @@ Right now there is the only internal **CommandReceived** event that is needed fo
 **Actions** - widget's method `update(&mut self, cmd: Command)` returns **Action** that you can handle after widget updated.
 
 ```rust
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Action {
-    Redraw,
     Shutdown,
     ChangeTitle,
+    #[default]
     Ignore,
 }
 ```
@@ -124,7 +123,8 @@ impl App {
         (
             Self {
                 title: String::from("Terminal app"),
-                term: iced_term::Terminal::new(term_id, term_settings),
+                term: iced_term::Terminal::new(term_id, term_settings)
+                    .expect("failed to create the new terminal instance"),
             },
             Task::none(),
         )
@@ -149,16 +149,18 @@ impl App {
     // ... other methods
     fn update(&mut self, event: Event) -> Task<Event> {
         match event {
-            Event::Terminal(iced_term::Event::CommandReceived(
-                _,
-                cmd,
-            )) => match self.term.update(cmd) {
-                iced_term::actions::Action::Shutdown => {
-                    window::get_latest().and_then(window::close)
-                },
-                _ => Task::none(),
+            Event::Terminal(iced_term::Event::BackendCall(_, cmd)) => {
+                match self.term.handle(iced_term::Command::ProxyToBackend(cmd))
+                {
+                    iced_term::actions::Action::Shutdown => {
+                        return window::get_latest().and_then(window::close)
+                    },
+                    _ => {},
+                }
             },
         }
+
+        Task::none()
     }
 }
 ```
@@ -183,9 +185,7 @@ impl App {
 impl App {
     // ... other methods
     fn subscription(&self) -> Subscription<Event> {
-        let term_subscription = iced_term::Subscription::new(self.term.id);
-        let term_event_stream = term_subscription.event_stream();
-        Subscription::run_with_id(self.term.id, term_event_stream)
+        Subscription::run_with_id(self.term.id, self.term.subscription())
             .map(Event::Terminal)
     }
 }
@@ -234,7 +234,7 @@ cargo run --package <example name>
 
  - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
  - [alacritty_terminal (0.25.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
- - [tokio (1.41.1)](https://github.com/tokio-rs/tokio)
+ - [tokio (1.47.1)](https://github.com/tokio-rs/tokio)
 
 ## Contributing / Feedback
 

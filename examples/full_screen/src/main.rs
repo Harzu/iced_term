@@ -1,8 +1,12 @@
 use iced::advanced::graphics::core::Element;
-use iced::font::{Family, Stretch, Weight};
+use iced::font::{Family, Weight};
 use iced::widget::container;
 use iced::{window, Font, Length, Size, Subscription, Task, Theme};
 use iced_term::TerminalView;
+
+const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+);
 
 fn main() -> iced::Result {
     iced::application(App::title, App::update, App::view)
@@ -12,6 +16,7 @@ fn main() -> iced::Result {
             height: 720.0,
         })
         .subscription(App::subscription)
+        .font(TERM_FONT_JET_BRAINS_BYTES)
         .run_with(App::new)
 }
 
@@ -37,8 +42,7 @@ impl App {
                 font_type: Font {
                     weight: Weight::Bold,
                     family: Family::Name("JetBrainsMono Nerd Font Mono"),
-                    stretch: Stretch::Normal,
-                    ..Default::default()
+                    ..Font::default()
                 },
                 ..Default::default()
             },
@@ -52,7 +56,8 @@ impl App {
         (
             Self {
                 title: String::from("full_screen"),
-                term: iced_term::Terminal::new(term_id, term_settings),
+                term: iced_term::Terminal::new(term_id, term_settings)
+                    .expect("failed to create the new terminal instance"),
             },
             Task::none(),
         )
@@ -63,27 +68,27 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Event> {
-        let term_subscription = iced_term::Subscription::new(self.term.id);
-        let term_event_stream = term_subscription.event_stream();
-        Subscription::run_with_id(self.term.id, term_event_stream)
+        Subscription::run_with_id(self.term.id, self.term.subscription())
             .map(Event::Terminal)
     }
 
     fn update(&mut self, event: Event) -> Task<Event> {
         match event {
-            Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
-                match self.term.update(cmd) {
+            Event::Terminal(iced_term::Event::BackendCall(_, cmd)) => {
+                match self.term.handle(iced_term::Command::ProxyToBackend(cmd))
+                {
                     iced_term::actions::Action::Shutdown => {
-                        window::get_latest().and_then(window::close)
+                        return window::get_latest().and_then(window::close)
                     },
                     iced_term::actions::Action::ChangeTitle(title) => {
                         self.title = title;
-                        Task::none()
                     },
-                    _ => Task::none(),
+                    _ => {},
                 }
             },
         }
+
+        Task::none()
     }
 
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {
