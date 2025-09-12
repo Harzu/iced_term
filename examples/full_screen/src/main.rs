@@ -22,7 +22,6 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    Ready,
     Terminal(iced_term::Event),
 }
 
@@ -57,9 +56,10 @@ impl App {
         (
             Self {
                 title: String::from("full_screen"),
-                term: iced_term::Terminal::new(term_id, term_settings).unwrap(),
+                term: iced_term::Terminal::new(term_id, term_settings)
+                    .expect("failed to create the new terminal instance"),
             },
-            Task::none()
+            Task::none(),
         )
     }
 
@@ -68,30 +68,27 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Event> {
-        let term_subscription = iced_term::Subscription::new(self.term.id, self.term.backend_event_rx());
-        let term_event_stream = term_subscription.event_stream();
-        Subscription::run_with_id(self.term.id, term_event_stream)
+        Subscription::run_with_id(self.term.id, self.term.subscription())
             .map(Event::Terminal)
     }
 
     fn update(&mut self, event: Event) -> Task<Event> {
-                        println!("app {:?}", event);
-
         match event {
-            Event::Ready => Task::none(),
-            Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
-                match self.term.handle(cmd) {
+            Event::Terminal(iced_term::Event::BackendCall(_, cmd)) => {
+                match self.term.handle(iced_term::Command::ProxyToBackend(cmd))
+                {
                     iced_term::actions::Action::Shutdown => {
-                        window::get_latest().and_then(window::close)
+                        return window::get_latest().and_then(window::close)
                     },
                     iced_term::actions::Action::ChangeTitle(title) => {
                         self.title = title;
-                        Task::none()
-                    }
-                    _ => Task::none()
+                    },
+                    _ => {},
                 }
-            }
+            },
         }
+
+        Task::none()
     }
 
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {

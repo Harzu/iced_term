@@ -21,13 +21,13 @@ fn main() -> iced::Result {
             height: 720.0,
         })
         .subscription(App::subscription)
+        .font(TERM_FONT_JET_BRAINS_BYTES)
         .run_with(App::new)
 }
 
 #[derive(Debug, Clone)]
 pub enum Event {
     Terminal(iced_term::Event),
-    FontLoaded(Result<(), iced::font::Error>),
 }
 
 struct App {
@@ -88,23 +88,25 @@ impl App {
                 BindingAction::Esc("\x1b[5~".into()),
             ),
         ];
-        let mut term = iced_term::Terminal::new(term_id, term_settings);
-        term.update(iced_term::Command::AddBindings(custom_bindings));
+
+        let mut term = iced_term::Terminal::new(term_id, term_settings)
+            .expect("failed to create the new terminal instance");
+
+        term.handle(iced_term::Command::AddBindings(custom_bindings));
 
         // You can also use generate_bindings macros
         let custom_bindings = generate_bindings!(
             KeyboardBinding;
             "l", Modifiers::SHIFT; BindingAction::Char('K');
         );
-        term.update(iced_term::Command::AddBindings(custom_bindings));
+        term.handle(iced_term::Command::AddBindings(custom_bindings));
 
         (
             Self {
                 title: String::from("custom_bindings"),
                 term,
             },
-            Task::batch(vec![iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
-                .map(Event::FontLoaded)]),
+            Task::none(),
         )
     }
 
@@ -113,28 +115,27 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Event> {
-        let term_subscription = iced_term::Subscription::new(self.term.id);
-        let term_event_stream = term_subscription.event_stream();
-        Subscription::run_with_id(self.term.id, term_event_stream)
+        Subscription::run_with_id(self.term.id, self.term.subscription())
             .map(Event::Terminal)
     }
 
     fn update(&mut self, event: Event) -> Task<Event> {
         match event {
-            Event::FontLoaded(_) => Task::none(),
-            Event::Terminal(iced_term::Event::CommandReceived(_, cmd)) => {
-                match self.term.update(cmd) {
+            Event::Terminal(iced_term::Event::BackendCall(_, cmd)) => {
+                match self.term.handle(iced_term::Command::ProxyToBackend(cmd))
+                {
                     iced_term::actions::Action::Shutdown => {
-                        window::get_latest().and_then(window::close)
+                        return window::get_latest().and_then(window::close)
                     },
                     iced_term::actions::Action::ChangeTitle(title) => {
                         self.title = title;
-                        Task::none()
                     },
-                    _ => Task::none(),
+                    _ => {},
                 }
             },
         }
+
+        Task::none()
     }
 
     fn view(&self) -> Element<Event, Theme, iced::Renderer> {

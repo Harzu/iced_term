@@ -19,6 +19,7 @@ fn main() -> iced::Result {
             height: 720.0,
         })
         .subscription(App::subscription)
+        .font(TERM_FONT_JET_BRAINS_BYTES)
         .run_with(App::new)
 }
 
@@ -37,7 +38,6 @@ enum Event {
     Resized(pane_grid::ResizeEvent),
     Close(pane_grid::Pane),
     Terminal(iced_term::Event),
-    FontLoaded(Result<(), iced::font::Error>),
 }
 
 impl App {
@@ -63,10 +63,13 @@ impl App {
                 ..Default::default()
             },
         };
+
         let tab = iced_term::Terminal::new(
             initial_pane_id as u64,
             term_settings.clone(),
-        );
+        )
+        .expect("failed to create the new terminal instance");
+
         let mut tabs = HashMap::new();
         tabs.insert(initial_pane_id as u64, tab);
 
@@ -78,8 +81,7 @@ impl App {
                 term_settings,
                 focus: None,
             },
-            Task::batch(vec![iced::font::load(TERM_FONT_JET_BRAINS_BYTES)
-                .map(Event::FontLoaded)]),
+            Task::none(),
         )
     }
 
@@ -89,7 +91,6 @@ impl App {
 
     fn update(&mut self, event: Event) -> Task<Event> {
         match event {
-            Event::FontLoaded(_) => {},
             Event::Split(axis, pane) => {
                 let result =
                     self.panes.split(axis, pane, Pane::new(self.panes_created));
@@ -97,7 +98,9 @@ impl App {
                 let tab = iced_term::Terminal::new(
                     self.panes_created as u64,
                     self.term_settings.clone(),
-                );
+                )
+                .expect("failed to create the new terminal instance");
+
                 let command = TerminalView::focus(tab.widget_id());
                 self.tabs.insert(self.panes_created as u64, tab);
 
@@ -136,9 +139,11 @@ impl App {
                     return window::get_latest().and_then(window::close);
                 }
             },
-            Event::Terminal(iced_term::Event::CommandReceived(id, cmd)) => {
+            Event::Terminal(iced_term::Event::BackendCall(id, cmd)) => {
                 if let Some(tab) = self.tabs.get_mut(&id) {
-                    if tab.update(cmd) == iced_term::actions::Action::Shutdown {
+                    if tab.handle(iced_term::Command::ProxyToBackend(cmd))
+                        == iced_term::actions::Action::Shutdown
+                    {
                         if let Some(current_pane) = self.focus {
                             return self.update(Event::Close(current_pane));
                         }
@@ -203,10 +208,8 @@ impl App {
         let mut subscriptions = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            let term_subscription = iced_term::Subscription::new(tab.id);
-            let term_event_stream = term_subscription.event_stream();
             subscriptions
-                .push(Subscription::run_with_id(tab.id, term_event_stream));
+                .push(Subscription::run_with_id(tab.id, tab.subscription()));
         }
 
         Subscription::batch(subscriptions).map(Event::Terminal)

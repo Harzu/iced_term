@@ -28,6 +28,11 @@ impl TermFont {
             ),
         }
     }
+
+    pub fn sync(&mut self) {
+        self.measure =
+            font_measure(self.size, self.scale_factor, self.font_type)
+    }
 }
 
 fn font_measure(

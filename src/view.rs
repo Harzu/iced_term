@@ -1,14 +1,15 @@
 use crate::backend::{
-    Backend, BackendCommand, LinkAction, MouseButton, RenderableContent,
+    Backend, Command, LinkAction, MouseButton, RenderableContent,
 };
 use crate::bindings::{BindingAction, BindingsLayout, InputKind};
-use crate::terminal::{Command, Event, Terminal};
+use crate::terminal::{Event, Terminal};
 use crate::theme::TerminalStyle;
 use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
 use alacritty_terminal::vte::ansi::{self as ansi, NamedColor};
 use iced::alignment::{Horizontal, Vertical};
+use iced::font::{Style as FontStyle, Weight as FontWeight};
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Path, Text};
 use iced::widget::container;
@@ -61,12 +62,10 @@ impl<'a> TerminalView<'a> {
     }
 
     fn is_cursor_hovered_hyperlink(&self, state: &TerminalViewState) -> bool {
-        // if let Some(ref backend) = self.term.backend {
-            let content = self.term.backend.renderable_content();
-            if let Some(hyperlink_range) = &content.hovered_hyperlink {
-                return hyperlink_range.contains(&state.mouse_position_on_grid);
-            }
-        // }
+        let content = self.term.backend.renderable_content();
+        if let Some(hyperlink_range) = &content.hovered_hyperlink {
+            return hyperlink_range.contains(&state.mouse_position_on_grid);
+        }
 
         false
     }
@@ -79,52 +78,50 @@ impl<'a> TerminalView<'a> {
         event: iced::mouse::Event,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
-        // if let Some(backend) = &self.term.backend {
-            let terminal_content = self.term.backend.renderable_content();
-            let terminal_mode = terminal_content.terminal_mode;
+        let terminal_content = self.term.backend.renderable_content();
+        let terminal_mode = terminal_content.terminal_mode;
 
-            match event {
-                iced_core::mouse::Event::ButtonPressed(
-                    iced_core::mouse::Button::Left,
-                ) => {
-                    Self::handle_left_button_pressed(
-                        state,
-                        &terminal_mode,
-                        cursor_position,
-                        layout_position,
-                        &mut commands,
-                    );
-                },
-                iced_core::mouse::Event::CursorMoved { position } => {
-                    Self::handle_cursor_moved(
-                        state,
-                        self.term.backend.renderable_content(),
-                        position,
-                        layout_position,
-                        &mut commands,
-                    );
-                },
-                iced_core::mouse::Event::ButtonReleased(
-                    iced_core::mouse::Button::Left,
-                ) => {
-                    Self::handle_button_released(
-                        state,
-                        &terminal_mode,
-                        &self.term.bindings,
-                        &mut commands,
-                    );
-                },
-                iced::mouse::Event::WheelScrolled { delta } => {
-                    Self::handle_wheel_scrolled(
-                        state,
-                        delta,
-                        &self.term.font.measure,
-                        &mut commands,
-                    );
-                },
-                _ => {},
-            }
-        // }
+        match event {
+            iced_core::mouse::Event::ButtonPressed(
+                iced_core::mouse::Button::Left,
+            ) => {
+                Self::handle_left_button_pressed(
+                    state,
+                    &terminal_mode,
+                    cursor_position,
+                    layout_position,
+                    &mut commands,
+                );
+            },
+            iced_core::mouse::Event::CursorMoved { position } => {
+                Self::handle_cursor_moved(
+                    state,
+                    self.term.backend.renderable_content(),
+                    position,
+                    layout_position,
+                    &mut commands,
+                );
+            },
+            iced_core::mouse::Event::ButtonReleased(
+                iced_core::mouse::Button::Left,
+            ) => {
+                Self::handle_button_released(
+                    state,
+                    &terminal_mode,
+                    &self.term.bindings,
+                    &mut commands,
+                );
+            },
+            iced::mouse::Event::WheelScrolled { delta } => {
+                Self::handle_wheel_scrolled(
+                    state,
+                    delta,
+                    &self.term.font.measure,
+                    &mut commands,
+                );
+            },
+            _ => {},
+        }
 
         commands
     }
@@ -137,12 +134,12 @@ impl<'a> TerminalView<'a> {
         commands: &mut Vec<Command>,
     ) {
         let cmd = if terminal_mode.intersects(TermMode::MOUSE_MODE) {
-            Command::ProcessBackendCommand(BackendCommand::MouseReport(
+            Command::MouseReport(
                 MouseButton::LeftButton,
                 state.keyboard_modifiers,
                 state.mouse_position_on_grid,
                 true,
-            ))
+            )
         } else {
             let current_click = Click::new(
                 cursor_position,
@@ -155,13 +152,13 @@ impl<'a> TerminalView<'a> {
                 mouse::click::Kind::Triple => SelectionType::Lines,
             };
             state.last_click = Some(current_click);
-            Command::ProcessBackendCommand(BackendCommand::SelectStart(
+            Command::SelectStart(
                 selection_type,
                 (
                     cursor_position.x - layout_position.x,
                     cursor_position.y - layout_position.y,
                 ),
-            ))
+            )
         };
         commands.push(cmd);
         state.is_dragged = true;
@@ -187,27 +184,23 @@ impl<'a> TerminalView<'a> {
         if state.is_dragged {
             let terminal_mode = terminal_content.terminal_mode;
             let cmd = if terminal_mode.intersects(TermMode::MOUSE_MOTION) {
-                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                Command::MouseReport(
                     MouseButton::LeftMove,
                     state.keyboard_modifiers,
                     state.mouse_position_on_grid,
                     true,
-                ))
+                )
             } else {
-                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
-                    cursor_x, cursor_y,
-                )))
+                Command::SelectUpdate((cursor_x, cursor_y))
             };
             commands.push(cmd);
         }
 
         // Handle link hover if applicable
         if state.keyboard_modifiers == Modifiers::COMMAND {
-            commands.push(Command::ProcessBackendCommand(
-                BackendCommand::ProcessLink(
-                    LinkAction::Hover,
-                    state.mouse_position_on_grid,
-                ),
+            commands.push(Command::ProcessLink(
+                LinkAction::Hover,
+                state.mouse_position_on_grid,
             ));
         }
     }
@@ -221,13 +214,11 @@ impl<'a> TerminalView<'a> {
         state.is_dragged = false;
 
         if terminal_mode.intersects(TermMode::MOUSE_MODE) {
-            commands.push(Command::ProcessBackendCommand(
-                BackendCommand::MouseReport(
-                    MouseButton::LeftButton,
-                    state.keyboard_modifiers,
-                    state.mouse_position_on_grid,
-                    false,
-                ),
+            commands.push(Command::MouseReport(
+                MouseButton::LeftButton,
+                state.keyboard_modifiers,
+                state.mouse_position_on_grid,
+                false,
             ));
         }
 
@@ -237,11 +228,9 @@ impl<'a> TerminalView<'a> {
             *terminal_mode,
         ) == BindingAction::LinkOpen
         {
-            commands.push(Command::ProcessBackendCommand(
-                BackendCommand::ProcessLink(
-                    LinkAction::Open,
-                    state.mouse_position_on_grid,
-                ),
+            commands.push(Command::ProcessLink(
+                LinkAction::Open,
+                state.mouse_position_on_grid,
             ));
         }
     }
@@ -255,9 +244,7 @@ impl<'a> TerminalView<'a> {
         match delta {
             ScrollDelta::Lines { y, .. } => {
                 let lines = y.signum() * y.abs().round();
-                commands.push(Command::ProcessBackendCommand(
-                    BackendCommand::Scroll(lines as i32),
-                ));
+                commands.push(Command::Scroll(lines as i32));
             },
             ScrollDelta::Pixels { y, .. } => {
                 state.scroll_pixels -= y;
@@ -265,9 +252,7 @@ impl<'a> TerminalView<'a> {
                 let lines = (state.scroll_pixels / line_height).trunc();
                 state.scroll_pixels %= line_height;
                 if lines != 0.0 {
-                    commands.push(Command::ProcessBackendCommand(
-                        BackendCommand::Scroll(lines as i32),
-                    ));
+                    commands.push(Command::Scroll(lines as i32));
                 }
             },
         }
@@ -279,91 +264,78 @@ impl<'a> TerminalView<'a> {
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         event: iced::keyboard::Event,
     ) -> Option<Command> {
-        // if let Some(ref backend) = &self.term.backend {
-            let mut binding_action = BindingAction::Ignore;
-            let last_content = self.term.backend.renderable_content();
-            match event {
-                iced::keyboard::Event::ModifiersChanged(m) => {
-                    state.keyboard_modifiers = m;
-                    let action =
-                        if state.keyboard_modifiers == Modifiers::COMMAND {
-                            LinkAction::Hover
-                        } else {
-                            LinkAction::Clear
-                        };
-                    return Some(Command::ProcessBackendCommand(
-                        BackendCommand::ProcessLink(
-                            action,
-                            state.mouse_position_on_grid,
-                        ),
-                    ));
-                },
-                iced::keyboard::Event::KeyPressed {
-                    key,
-                    modifiers,
-                    text,
-                    ..
-                } => match key {
-                    Key::Character(_) => {
+        let mut binding_action = BindingAction::Ignore;
+        let last_content = self.term.backend.renderable_content();
+        match event {
+            iced::keyboard::Event::ModifiersChanged(m) => {
+                state.keyboard_modifiers = m;
+                let action = if state.keyboard_modifiers == Modifiers::COMMAND {
+                    LinkAction::Hover
+                } else {
+                    LinkAction::Clear
+                };
+                return Some(Command::ProcessLink(
+                    action,
+                    state.mouse_position_on_grid,
+                ));
+            },
+            iced::keyboard::Event::KeyPressed {
+                key,
+                modifiers,
+                text,
+                ..
+            } => match &key {
+                // Use the physical character key for bindings even when text is None (e.g., Ctrl/Cmd combos)
+                Key::Character(k) => {
+                    let lower = k.to_ascii_lowercase();
+                    binding_action = self.term.bindings.get_action(
+                        InputKind::Char(lower),
+                        state.keyboard_modifiers,
+                        last_content.terminal_mode,
+                    );
+
+                    // If no binding matched, only write printable text (when provided)
+                    if binding_action == BindingAction::Ignore {
                         if let Some(c) = text {
-                            binding_action = self.term.bindings.get_action(
-                                InputKind::Char(c.to_ascii_lowercase()),
-                                state.keyboard_modifiers,
-                                last_content.terminal_mode,
-                            );
-
-                            if binding_action == BindingAction::Ignore {
-                                return Some(Command::ProcessBackendCommand(
-                                    BackendCommand::Write(
-                                        c.as_bytes().to_vec(),
-                                    ),
-                                ));
-                            }
+                            return Some(Command::Write(c.as_bytes().to_vec()));
                         }
-                    },
-                    Key::Named(code) => {
-                        binding_action = self.term.bindings.get_action(
-                            InputKind::KeyCode(code),
-                            modifiers,
-                            last_content.terminal_mode,
-                        );
-                    },
-                    _ => {},
-                },
-                _ => {},
-            }
-
-            match binding_action {
-                BindingAction::Char(c) => {
-                    let mut buf = [0, 0, 0, 0];
-                    let str = c.encode_utf8(&mut buf);
-                    return Some(Command::ProcessBackendCommand(
-                        BackendCommand::Write(str.as_bytes().to_vec()),
-                    ));
-                },
-                BindingAction::Esc(seq) => {
-                    return Some(Command::ProcessBackendCommand(
-                        BackendCommand::Write(seq.as_bytes().to_vec()),
-                    ));
-                },
-                BindingAction::Paste => {
-                    if let Some(data) = clipboard.read(ClipboardKind::Standard)
-                    {
-                        let input: Vec<u8> = data.bytes().collect();
-                        return Some(Command::ProcessBackendCommand(
-                            BackendCommand::Write(input),
-                        ));
                     }
                 },
-                BindingAction::Copy => {
-                    clipboard.write(
-                        ClipboardKind::Standard,
-                        self.term.backend.selectable_content(),
+                Key::Named(code) => {
+                    binding_action = self.term.bindings.get_action(
+                        InputKind::KeyCode(*code),
+                        modifiers,
+                        last_content.terminal_mode,
                     );
                 },
                 _ => {},
-            };
-        // }
+            },
+            _ => {},
+        }
+
+        match binding_action {
+            BindingAction::Char(c) => {
+                let mut buf = [0, 0, 0, 0];
+                let str = c.encode_utf8(&mut buf);
+                return Some(Command::Write(str.as_bytes().to_vec()));
+            },
+            BindingAction::Esc(seq) => {
+                return Some(Command::Write(seq.as_bytes().to_vec()));
+            },
+            BindingAction::Paste => {
+                if let Some(data) = clipboard.read(ClipboardKind::Standard) {
+                    let input: Vec<u8> = data.bytes().collect();
+                    return Some(Command::Write(input));
+                }
+            },
+            BindingAction::Copy => {
+                clipboard.write(
+                    ClipboardKind::Standard,
+                    self.term.backend.selectable_content(),
+                );
+            },
+            _ => {},
+        };
 
         None
     }
@@ -417,201 +389,191 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        // if let Some(ref backend) = &self.term.backend {
-            let state = tree.state.downcast_ref::<TerminalViewState>();
-            let content = self.term.backend.renderable_content();
-            let term_size = content.terminal_size;
-            let cell_width = term_size.cell_width as f32;
-            let cell_height = term_size.cell_height as f32;
-            let font_size = self.term.font.size;
-            let font_scale_factor = self.term.font.scale_factor;
-            let layout_offset_x = layout.position().x;
-            let layout_offset_y = layout.position().y;
+        let state = tree.state.downcast_ref::<TerminalViewState>();
+        let content = self.term.backend.renderable_content();
+        let term_size = content.terminal_size;
+        let cell_width = term_size.cell_width as f32;
+        let cell_height = term_size.cell_height as f32;
+        let font_size = self.term.font.size;
+        let font_scale_factor = self.term.font.scale_factor;
+        let layout_offset_x = layout.position().x;
+        let layout_offset_y = layout.position().y;
 
-            let geom =
-                self.term.cache.draw(renderer, viewport.size(), |frame| {
-                    // Precompute constants used in the inner loop
-                    let display_offset = content.grid.display_offset() as f32;
-                    let cell_size = Size::new(cell_width, cell_height);
-                    let half_w = cell_width * 0.5;
-                    let half_h = cell_height * 0.5;
-                    // We use the background pallete color as a default
-                    // because the widget global background color must be the same
-                    let default_bg = self
-                        .term
-                        .theme
-                        .get_color(ansi::Color::Named(NamedColor::Background));
+        let geom = self.term.cache.draw(renderer, viewport.size(), |frame| {
+            // Precompute constants used in the inner loop
+            let display_offset = content.grid.display_offset() as f32;
+            let cell_size = Size::new(cell_width, cell_height);
+            let half_w = cell_width * 0.5;
+            let half_h = cell_height * 0.5;
+            // We use the background pallete color as a default
+            // because the widget global background color must be the same
+            let default_bg = self
+                .term
+                .theme
+                .get_color(ansi::Color::Named(NamedColor::Background));
 
-                    let mut last_line: Option<i32> = None;
-                    let mut bg_batch_rect = BackgroundRect::default();
+            let mut last_line: Option<i32> = None;
+            let mut bg_batch_rect = BackgroundRect::default();
 
-                    for indexed in content.grid.display_iter() {
-                        // Compute per-cell geometry cheaply
-                        let line = indexed.point.line.0;
-                        let col = indexed.point.column.0 as f32;
+            for indexed in content.grid.display_iter() {
+                // Compute per-cell geometry cheaply
+                let line = indexed.point.line.0;
+                let col = indexed.point.column.0 as f32;
 
-                        // Resolve position point for this cell
-                        let x = layout_offset_x + (col * cell_width);
-                        let y = layout_offset_y
-                            + (((line as f32) + display_offset) * cell_height);
-                        let cell_center_y = y + half_h;
-                        let cell_center_x = x + half_w;
+                // Resolve position point for this cell
+                let x = layout_offset_x + (col * cell_width);
+                let y = layout_offset_y
+                    + (((line as f32) + display_offset) * cell_height);
+                let cell_center_y = y + half_h;
+                let cell_center_x = x + half_w;
 
-                        // Resolve colors for this cell
-                        let mut fg = self.term.theme.get_color(indexed.fg);
-                        let mut bg = self.term.theme.get_color(indexed.bg);
+                // Resolve colors for this cell
+                let mut fg = self.term.theme.get_color(indexed.fg);
+                let mut bg = self.term.theme.get_color(indexed.bg);
 
-                        // If the new line was detected,
-                        // need to flush pending background rect and init the new one
-                        if last_line != Some(line) {
-                            if bg_batch_rect.can_flush() {
-                                let line = last_line.unwrap_or(line);
-                                frame.fill(
-                                    &bg_batch_rect.build(line),
-                                    bg_batch_rect.color,
-                                );
-                            }
+                // If the new line was detected,
+                // need to flush pending background rect and init the new one
+                if last_line != Some(line) {
+                    if bg_batch_rect.can_flush() {
+                        let line = last_line.unwrap_or(line);
+                        frame.fill(
+                            &bg_batch_rect.build(line),
+                            bg_batch_rect.color,
+                        );
+                    }
 
-                            last_line = Some(line);
-                            bg_batch_rect = BackgroundRect::default()
-                                .with_cell_height(cell_height)
-                                .with_display_offset(display_offset)
-                                .with_layout_offset_y(layout_offset_y);
-                        }
+                    last_line = Some(line);
+                    bg_batch_rect = BackgroundRect::default()
+                        .with_cell_height(cell_height)
+                        .with_display_offset(display_offset)
+                        .with_layout_offset_y(layout_offset_y);
+                }
 
-                        // Handle dim, inverse, and selected text
-                        if indexed.cell.flags.intersects(
-                            cell::Flags::DIM | cell::Flags::DIM_BOLD,
-                        ) {
-                            fg.a *= 0.7;
-                        }
-                        if indexed.cell.flags.contains(cell::Flags::INVERSE)
-                            || content
-                                .selectable_range
-                                .is_some_and(|r| r.contains(indexed.point))
-                        {
-                            std::mem::swap(&mut fg, &mut bg);
-                        }
+                // Handle dim, inverse, and selected text
+                if indexed
+                    .cell
+                    .flags
+                    .intersects(cell::Flags::DIM | cell::Flags::DIM_BOLD)
+                {
+                    fg.a *= 0.7;
+                }
+                if indexed.cell.flags.contains(cell::Flags::INVERSE)
+                    || content
+                        .selectable_range
+                        .is_some_and(|r| r.contains(indexed.point))
+                {
+                    std::mem::swap(&mut fg, &mut bg);
+                }
 
-                        // Batch draw backgrounds: skip default background (container already paints it)
-                        if bg != default_bg {
-                            if bg_batch_rect.can_extend(bg, x) {
-                                // Same color and contiguous: extend current run
-                                bg_batch_rect.extend(cell_width);
-                            } else {
-                                // New colored run (or non-contiguous): flush previous run if any
-                                if bg_batch_rect.can_flush() {
-                                    frame.fill(
-                                        &bg_batch_rect.build(line),
-                                        bg_batch_rect.color,
-                                    );
-                                }
-
-                                // Start a new run but do not draw yet; wait for potential extensions
-                                bg_batch_rect = BackgroundRect::default()
-                                    .with_cell_height(cell_height)
-                                    .with_display_offset(display_offset)
-                                    .with_layout_offset_y(layout_offset_y)
-                                    .activate()
-                                    .with_color(bg)
-                                    .with_start_x(x)
-                                    .with_width(cell_width);
-                            }
-                        } else if bg_batch_rect.can_flush() {
-                            // Background returns to default, flush current background rect and init the new one
+                // Batch draw backgrounds: skip default background (container already paints it)
+                if bg != default_bg {
+                    if bg_batch_rect.can_extend(bg, x) {
+                        // Same color and contiguous: extend current run
+                        bg_batch_rect.extend(cell_width);
+                    } else {
+                        // New colored run (or non-contiguous): flush previous run if any
+                        if bg_batch_rect.can_flush() {
                             frame.fill(
                                 &bg_batch_rect.build(line),
                                 bg_batch_rect.color,
                             );
-
-                            bg_batch_rect = BackgroundRect::default()
-                                .with_cell_height(cell_height)
-                                .with_display_offset(display_offset)
-                                .with_layout_offset_y(layout_offset_y);
                         }
 
-                        // Draw hovered hyperlink underline (rare; keep per-cell for correctness)
-                        if content.hovered_hyperlink.as_ref().is_some_and(
-                            |range| {
-                                range.contains(&indexed.point)
-                                    && range
-                                        .contains(&state.mouse_position_on_grid)
-                            },
-                        ) || indexed
-                            .cell
-                            .flags
-                            .contains(cell::Flags::UNDERLINE)
-                        {
-                            let underline_height = y + cell_size.height;
-                            let underline = Path::line(
-                                Point::new(x, underline_height),
-                                Point::new(
-                                    x + cell_size.width,
-                                    underline_height,
-                                ),
-                            );
-                            frame.stroke(
-                                &underline,
-                                Stroke::default()
-                                    .with_width(font_size * 0.15)
-                                    .with_color(fg),
-                            );
-                        }
-
-                        // Handle cursor rendering
-                        if content.grid.cursor.point == indexed.point
-                            && content
-                                .terminal_mode
-                                .contains(TermMode::SHOW_CURSOR)
-                        {
-                            let cursor_color =
-                                self.term.theme.get_color(content.cursor.fg);
-                            let cursor_rect =
-                                Path::rectangle(Point::new(x, y), cell_size);
-                            frame.fill(&cursor_rect, cursor_color);
-                        }
-
-                        // Draw text
-                        if indexed.c != ' ' && indexed.c != '\t' {
-                            if content.grid.cursor.point == indexed.point
-                                && content
-                                    .terminal_mode
-                                    .contains(TermMode::APP_CURSOR)
-                            {
-                                fg = bg;
-                            }
-                            let text = Text {
-                                content: indexed.c.to_string(),
-                                position: Point::new(
-                                    cell_center_x,
-                                    cell_center_y,
-                                ),
-                                font: self.term.font.font_type,
-                                size: iced_core::Pixels(font_size),
-                                color: fg,
-                                horizontal_alignment: Horizontal::Center,
-                                vertical_alignment: Vertical::Center,
-                                shaping: Shaping::Advanced,
-                                line_height: LineHeight::Relative(
-                                    font_scale_factor,
-                                ),
-                            };
-                            frame.fill_text(text);
-                        }
+                        // Start a new run but do not draw yet; wait for potential extensions
+                        bg_batch_rect = BackgroundRect::default()
+                            .with_cell_height(cell_height)
+                            .with_display_offset(display_offset)
+                            .with_layout_offset_y(layout_offset_y)
+                            .activate()
+                            .with_color(bg)
+                            .with_start_x(x)
+                            .with_width(cell_width);
                     }
+                } else if bg_batch_rect.can_flush() {
+                    // Background returns to default, flush current background rect and init the new one
+                    frame.fill(&bg_batch_rect.build(line), bg_batch_rect.color);
 
-                    // Flush any remaining background run at the end
-                    if bg_batch_rect.can_flush() {
-                        frame.fill(
-                            &bg_batch_rect.build(last_line.unwrap_or(0)),
-                            bg_batch_rect.color,
-                        );
+                    bg_batch_rect = BackgroundRect::default()
+                        .with_cell_height(cell_height)
+                        .with_display_offset(display_offset)
+                        .with_layout_offset_y(layout_offset_y);
+                }
+
+                // Draw hovered hyperlink underline (rare; keep per-cell for correctness)
+                if content.hovered_hyperlink.as_ref().is_some_and(|range| {
+                    range.contains(&indexed.point)
+                        && range.contains(&state.mouse_position_on_grid)
+                }) || indexed.cell.flags.contains(cell::Flags::UNDERLINE)
+                {
+                    let underline_height = y + cell_size.height;
+                    let underline = Path::line(
+                        Point::new(x, underline_height),
+                        Point::new(x + cell_size.width, underline_height),
+                    );
+                    frame.stroke(
+                        &underline,
+                        Stroke::default()
+                            .with_width(font_size * 0.15)
+                            .with_color(fg),
+                    );
+                }
+
+                // Handle cursor rendering
+                if content.grid.cursor.point == indexed.point
+                    && content.terminal_mode.contains(TermMode::SHOW_CURSOR)
+                {
+                    let cursor_color =
+                        self.term.theme.get_color(content.cursor.fg);
+                    let cursor_rect =
+                        Path::rectangle(Point::new(x, y), cell_size);
+                    frame.fill(&cursor_rect, cursor_color);
+                }
+
+                // Draw text
+                if indexed.c != ' ' && indexed.c != '\t' {
+                    if content.grid.cursor.point == indexed.point
+                        && content.terminal_mode.contains(TermMode::APP_CURSOR)
+                    {
+                        fg = bg;
                     }
-                });
+                    // Resolve font style (bold/italic) from cell flags
+                    let mut font = self.term.font.font_type;
+                    if indexed
+                        .cell
+                        .flags
+                        .intersects(cell::Flags::BOLD | cell::Flags::DIM_BOLD)
+                    {
+                        font.weight = FontWeight::Bold;
+                    }
+                    if indexed.cell.flags.contains(cell::Flags::ITALIC) {
+                        font.style = FontStyle::Italic;
+                    }
+                    let text = Text {
+                        content: indexed.c.to_string(),
+                        position: Point::new(cell_center_x, cell_center_y),
+                        font,
+                        size: iced_core::Pixels(font_size),
+                        color: fg,
+                        horizontal_alignment: Horizontal::Center,
+                        vertical_alignment: Vertical::Center,
+                        shaping: Shaping::Advanced,
+                        line_height: LineHeight::Relative(font_scale_factor),
+                    };
+                    frame.fill_text(text);
+                }
+            }
 
-            use iced::advanced::graphics::geometry::Renderer as _;
-            renderer.draw_geometry(geom);
-        // }
+            // Flush any remaining background run at the end
+            if bg_batch_rect.can_flush() {
+                frame.fill(
+                    &bg_batch_rect.build(last_line.unwrap_or(0)),
+                    bg_batch_rect.color,
+                );
+            }
+        });
+
+        use iced::advanced::graphics::geometry::Renderer as _;
+        renderer.draw_geometry(geom);
     }
 
     fn on_event(
@@ -629,11 +591,11 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         let layout_size = layout.bounds().size();
         if state.size != layout_size {
             state.size = layout_size;
-            let cmd = Command::ProcessBackendCommand(BackendCommand::Resize(
+            let cmd = Command::Resize(
                 Some(layout_size),
                 Some(self.term.font.measure),
-            ));
-            shell.publish(Event::CommandReceived(self.term.id, cmd));
+            );
+            shell.publish(Event::BackendCall(self.term.id, cmd));
         }
 
         if !state.is_focused {
@@ -659,13 +621,13 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
             _ => Vec::new(), // No commands for other events.
         };
 
-        if !commands.is_empty() {
+        if commands.is_empty() {
+            iced::event::Status::Ignored
+        } else {
             for cmd in commands {
-                shell.publish(Event::CommandReceived(self.term.id, cmd));
+                shell.publish(Event::BackendCall(self.term.id, cmd));
             }
             iced::event::Status::Captured
-        } else {
-            iced::event::Status::Ignored
         }
     }
 
@@ -679,10 +641,8 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     ) -> iced_core::mouse::Interaction {
         let state = tree.state.downcast_ref::<TerminalViewState>();
         let mut cursor_mode = iced_core::mouse::Interaction::Idle;
-        let mut terminal_mode = TermMode::empty();
-        // if let Some(ref backend) = &self.term.backend {
-            terminal_mode = self.term.backend.renderable_content().terminal_mode;
-        // }
+        let terminal_mode =
+            self.term.backend.renderable_content().terminal_mode;
         if self.is_cursor_in_layout(cursor, layout)
             && !terminal_mode.contains(TermMode::SGR_MOUSE)
         {
@@ -847,7 +807,7 @@ mod tests {
             assert_eq!(commands.len(), 1);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                Command::MouseReport(
                     MouseButton::LeftButton,
                     _modifiers,
                     TerminalGridPoint {
@@ -855,7 +815,7 @@ mod tests {
                         column: Column(0),
                     },
                     true,
-                ))
+                )
             ));
             assert!(state.is_dragged);
         }
@@ -888,13 +848,8 @@ mod tests {
                 assert_eq!(commands.len(), 1);
                 assert!(matches!(
                     commands[0],
-                    Command::ProcessBackendCommand(
-                        BackendCommand::SelectStart(
-                            _selection_type,
-                            (150.0, 100.0)
-                        )
-                    ),
-                ));
+                    Command::SelectStart(_selection_type, (150.0, 100.0))
+                ),);
                 assert!(state.is_dragged);
             }
         }
@@ -986,9 +941,7 @@ mod tests {
             assert_eq!(commands.len(), 1);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
-                    95.0, 145.0
-                )))
+                Command::SelectUpdate((95.0, 145.0))
             ));
         }
 
@@ -1014,7 +967,7 @@ mod tests {
             assert_eq!(commands.len(), 1);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                Command::MouseReport(
                     MouseButton::LeftMove,
                     _modifiers,
                     TerminalGridPoint {
@@ -1022,7 +975,7 @@ mod tests {
                         column: Column(79),
                     },
                     true,
-                ))
+                )
             ));
         }
 
@@ -1049,9 +1002,7 @@ mod tests {
             assert_eq!(commands.len(), 1);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
-                    95.0, 145.0
-                )))
+                Command::SelectUpdate((95.0, 145.0))
             ));
         }
 
@@ -1077,19 +1028,17 @@ mod tests {
             assert_eq!(commands.len(), 2);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::SelectUpdate((
-                    95.0, 145.0
-                )))
+                Command::SelectUpdate((95.0, 145.0))
             ));
             assert!(matches!(
                 commands[1],
-                Command::ProcessBackendCommand(BackendCommand::ProcessLink(
+                Command::ProcessLink(
                     LinkAction::Hover,
                     TerminalGridPoint {
                         line: Line(49),
                         column: Column(79),
                     },
-                ))
+                )
             ));
         }
     }
@@ -1116,7 +1065,7 @@ mod tests {
             assert_eq!(commands.len(), 1);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                Command::MouseReport(
                     MouseButton::LeftButton,
                     _modifiers,
                     TerminalGridPoint {
@@ -1124,7 +1073,7 @@ mod tests {
                         column: Column(0)
                     },
                     false
-                ))
+                )
             ));
         }
 
@@ -1147,7 +1096,7 @@ mod tests {
             assert_eq!(commands.len(), 2);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::MouseReport(
+                Command::MouseReport(
                     MouseButton::LeftButton,
                     _modifiers,
                     TerminalGridPoint {
@@ -1155,17 +1104,17 @@ mod tests {
                         column: Column(0)
                     },
                     false
-                ))
+                )
             ));
             assert!(matches!(
                 commands[1],
-                Command::ProcessBackendCommand(BackendCommand::ProcessLink(
+                Command::ProcessLink(
                     LinkAction::Open,
                     TerminalGridPoint {
                         line: Line(0),
                         column: Column(0)
                     }
-                )),
+                ),
             ));
         }
 
@@ -1191,13 +1140,13 @@ mod tests {
             assert_eq!(commands.len(), 1);
             assert!(matches!(
                 commands[0],
-                Command::ProcessBackendCommand(BackendCommand::ProcessLink(
+                Command::ProcessLink(
                     LinkAction::Open,
                     TerminalGridPoint {
                         line: Line(4),
                         column: Column(10)
                     }
-                )),
+                ),
             ));
         }
     }
@@ -1221,10 +1170,7 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(
-                commands[0],
-                Command::ProcessBackendCommand(BackendCommand::Scroll(3))
-            ));
+            assert!(matches!(commands[0], Command::Scroll(3)));
         }
 
         #[test]
@@ -1241,10 +1187,7 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(
-                commands[0],
-                Command::ProcessBackendCommand(BackendCommand::Scroll(-2))
-            ));
+            assert!(matches!(commands[0], Command::Scroll(-2)));
         }
 
         #[test]
@@ -1261,10 +1204,7 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(
-                commands[0],
-                Command::ProcessBackendCommand(BackendCommand::Scroll(-2))
-            ));
+            assert!(matches!(commands[0], Command::Scroll(-2)));
             assert_eq!(state.scroll_pixels, -8.600002);
         }
 
@@ -1282,10 +1222,7 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(
-                commands[0],
-                Command::ProcessBackendCommand(BackendCommand::Scroll(3))
-            ));
+            assert!(matches!(commands[0], Command::Scroll(3)));
             assert_eq!(state.scroll_pixels, 5.4000034);
         }
     }

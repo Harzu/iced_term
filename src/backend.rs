@@ -20,12 +20,12 @@ use std::cmp::min;
 use std::io::Result;
 use std::ops::{Index, RangeInclusive};
 use std::sync::Arc;
-// use std::sync::mpsc;
-use crossbeam_channel::Sender;
-// use tokio::sync::mpsc;
+use tokio::sync::mpsc;
+
+const URL_REGEX: &str = r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#;
 
 #[derive(Debug, Clone)]
-pub enum BackendCommand {
+pub enum Command {
     Write(Vec<u8>),
     Scroll(i32),
     Resize(Option<Size<f32>>, Option<Size<f32>>),
@@ -136,32 +136,30 @@ pub struct Backend {
     size: TerminalSize,
     notifier: Notifier,
     last_content: RenderableContent,
-    pub url_regex: RegexSearch,
+    pub(crate) url_regex: RegexSearch,
 }
 
 impl Backend {
     pub fn new(
         id: u64,
-        pty_event_proxy_sender: Sender<Event>,
+        pty_event_proxy_sender: mpsc::Sender<Event>,
         settings: BackendSettings,
-        font_size: Size<f32>,
     ) -> Result<Self> {
         let pty_config = tty::Options {
             shell: Some(tty::Shell::new(settings.program, settings.args)),
             ..tty::Options::default()
         };
-        let config = term::Config::default();
-        let terminal_size = TerminalSize {
-            cell_width: font_size.width as u16,
-            cell_height: font_size.height as u16,
-            ..TerminalSize::default()
-        };
 
+        let config = term::Config::default();
+        let terminal_size = TerminalSize::default();
         let pty = tty::new(&pty_config, terminal_size.into(), id)?;
-        let event_proxy = EventProxy(id, pty_event_proxy_sender);
+
+        let event_proxy = EventProxy(pty_event_proxy_sender);
 
         let mut term = Term::new(config, &terminal_size, event_proxy.clone());
+
         let cursor = term.grid_mut().cursor_cell().clone();
+
         let initial_content = RenderableContent {
             grid: term.grid().clone(),
             selectable_range: None,
@@ -172,73 +170,63 @@ impl Backend {
         };
 
         let term = Arc::new(FairMutex::new(term));
+
         let pty_event_loop =
             EventLoop::new(term.clone(), event_proxy, pty, false, false)?;
+
         let notifier = Notifier(pty_event_loop.channel());
-        let _pty_join_handle = pty_event_loop.spawn();
-        let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
+
+        let _ = pty_event_loop.spawn();
 
         Ok(Self {
             term: term.clone(),
             size: terminal_size,
             notifier,
             last_content: initial_content,
-            url_regex,
+            url_regex: RegexSearch::new(URL_REGEX).expect("invalid url regexp"),
         })
     }
 
-    pub fn handle(&mut self, cmd: BackendCommand) -> Action {
-        let mut action = Action::Ignore;
+    pub fn handle(&mut self, cmd: Command) -> Action {
+        let mut action = Action::default();
         let term = self.term.clone();
         let mut term = term.lock();
-        println!("backend: {:?}", cmd);
         match cmd {
-            BackendCommand::ProcessAlacrittyEvent(event) => {
+            Command::ProcessAlacrittyEvent(event) => {
                 match event {
-                    Event::Wakeup => {
-                        self.internal_sync(&mut term);
-                        action = Action::Redraw;
-                    },
                     Event::Exit => {
                         action = Action::Shutdown;
                     },
                     Event::Title(title) => {
                         action = Action::ChangeTitle(title);
                     },
-                    Event::PtyWrite(pty) => self.notifier.notify(pty.into_bytes()),
+                    Event::PtyWrite(pty) => {
+                        self.notifier.notify(pty.into_bytes())
+                    },
                     _ => {},
                 };
             },
-            BackendCommand::Write(input) => {
+            Command::Write(input) => {
                 self.write(input);
                 term.scroll_display(Scroll::Bottom);
             },
-            BackendCommand::Scroll(delta) => {
+            Command::Scroll(delta) => {
                 self.scroll(&mut term, delta);
-                self.internal_sync(&mut term);
-                action = Action::Redraw;
             },
-            BackendCommand::Resize(layout_size, font_measure) => {
+            Command::Resize(layout_size, font_measure) => {
                 self.resize(&mut term, layout_size, font_measure);
-                self.internal_sync(&mut term);
-                action = Action::Redraw;
             },
-            BackendCommand::SelectStart(selection_type, (x, y)) => {
+            Command::SelectStart(selection_type, (x, y)) => {
                 self.start_selection(&mut term, selection_type, x, y);
-                self.internal_sync(&mut term);
-                action = Action::Redraw;
             },
-            BackendCommand::SelectUpdate((x, y)) => {
+            Command::SelectUpdate((x, y)) => {
                 self.update_selection(&mut term, x, y);
-                self.internal_sync(&mut term);
-                action = Action::Redraw;
             },
-            BackendCommand::ProcessLink(link_action, point) => {
-                action = self.process_link_action(&term, link_action, point);
+            Command::ProcessLink(link_action, point) => {
+                self.process_link_action(&term, link_action, point);
             },
-            BackendCommand::MouseReport(button, modifiers, point, pressed) => {
+            Command::MouseReport(button, modifiers, point, pressed) => {
                 self.process_mouse_report(button, modifiers, point, pressed);
-                action = Action::Redraw;
             },
         };
 
@@ -250,8 +238,7 @@ impl Backend {
         terminal: &Term<EventProxy>,
         link_action: LinkAction,
         point: Point,
-    ) -> Action {
-        let mut action = Action::Ignore;
+    ) {
         match link_action {
             LinkAction::Hover => {
                 self.last_content.hovered_hyperlink = self.regex_match_at(
@@ -259,18 +246,14 @@ impl Backend {
                     point,
                     &mut self.url_regex.clone(),
                 );
-                action = Action::Redraw;
             },
             LinkAction::Clear => {
                 self.last_content.hovered_hyperlink = None;
-                action = Action::Redraw;
             },
             LinkAction::Open => {
                 self.open_link();
             },
         };
-
-        action
     }
 
     fn open_link(&self) {
@@ -591,13 +574,10 @@ impl Drop for Backend {
 }
 
 #[derive(Clone)]
-pub struct EventProxy(u64, Sender<Event>);
+pub struct EventProxy(mpsc::Sender<Event>);
 
 impl EventListener for EventProxy {
     fn send_event(&self, event: Event) {
-        let _ = self
-            .1
-            .send(event)
-            .unwrap_or_else(|_| { panic!("failed to process event proxy for pty with id: {}", self.0) });
+        let _ = self.0.blocking_send(event);
     }
 }
