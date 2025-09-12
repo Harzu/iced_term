@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Improvements of text rendering (bold, italic, underlined, etc).
 - Batch background rendering
-- Shell arguments (thanks @fdavid-spk)
+- Shell arguments (thanks [@fdavid-spk](https://github.com/fdavid-spk))
 - CHANGELOG.md
 - `msgcat --color=test` [results](./docs/colortest)
 
@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial font loading
 - Showing cursor only if terminal mode is `SHOW_CURSOR`
 - Examples using the new widget api
-- Typos in README.md (thanks @kxxt)
+- Typos in README.md (thanks [@kxxt](https://github.com/kxxt))
 
 ### Removed
 
