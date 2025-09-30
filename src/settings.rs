@@ -1,3 +1,5 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use crate::ColorPalette;
 use iced::Font;
 
@@ -18,6 +20,8 @@ pub struct Settings {
 pub struct BackendSettings {
     pub program: String,
     pub args: Vec<String>,
+    pub env: HashMap<String, String>,
+    pub working_directory: Option<PathBuf>
 }
 
 impl Default for BackendSettings {
@@ -25,6 +29,8 @@ impl Default for BackendSettings {
         Self {
             program: DEFAULT_SHELL.to_string(),
             args: vec![],
+            env: HashMap::new(),
+            working_directory: None
         }
     }
 }
