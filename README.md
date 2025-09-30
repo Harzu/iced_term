@@ -116,6 +116,7 @@ impl App {
         let term_settings = iced_term::settings::Settings {
             backend: iced_term::settings::BackendSettings {
                 shell: system_shell.to_string(),
+                ..Default::default()
             },
             ..Default::default()
         };
