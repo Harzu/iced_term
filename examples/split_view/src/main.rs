@@ -155,7 +155,7 @@ impl App {
         Task::none()
     }
 
-    fn view(&self) -> Element<Event> {
+    fn view(&'_ self) -> Element<'_, Event> {
         let focus = self.focus;
         let total_panes = self.panes.len();
 

@@ -138,7 +138,7 @@ impl App {
         Task::none()
     }
 
-    fn view(&self) -> Element<Event, Theme, iced::Renderer> {
+    fn view(&'_ self) -> Element<'_, Event, Theme, iced::Renderer> {
         container(TerminalView::show(&self.term).map(Event::Terminal))
             .width(Length::Fill)
             .height(Length::Fill)
