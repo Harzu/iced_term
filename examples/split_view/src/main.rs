@@ -44,6 +44,13 @@ impl App {
     fn new() -> (Self, Task<Event>) {
         let initial_pane_id = 0;
         let (panes, _) = pane_grid::State::new(Pane::new(initial_pane_id));
+        #[cfg(not(windows))]
+        let system_shell = std::env::var("SHELL")
+            .expect("SHELL variable is not defined")
+            .to_string();
+        #[cfg(windows)]
+        let system_shell = "cmd.exe".to_string();
+
         let term_settings = iced_term::settings::Settings {
             font: iced_term::settings::FontSettings {
                 size: 14.0,
@@ -57,9 +64,7 @@ impl App {
             },
             theme: iced_term::settings::ThemeSettings::default(),
             backend: iced_term::settings::BackendSettings {
-                program: std::env::var("SHELL")
-                    .expect("SHELL variable is not defined")
-                    .to_string(),
+                program: system_shell,
                 ..Default::default()
             },
         };

@@ -37,9 +37,13 @@ struct App {
 
 impl App {
     fn new() -> (Self, Task<Event>) {
+        #[cfg(not(windows))]
         let system_shell = std::env::var("SHELL")
             .expect("SHELL variable is not defined")
             .to_string();
+        #[cfg(windows)]
+        let system_shell = "cmd.exe".to_string();
+
         let term_id = 0;
         let term_settings = iced_term::settings::Settings {
             font: iced_term::settings::FontSettings {
