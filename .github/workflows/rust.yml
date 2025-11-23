@@ -26,6 +26,7 @@ jobs:
   lint:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
@@ -36,6 +37,7 @@ jobs:
         run: rustup update stable --no-self-update
       - name: Cache cargo deps
         uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: |-
             ~/.cargo/registry/index/
@@ -53,6 +55,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
@@ -63,6 +66,7 @@ jobs:
         run: rustup update stable --no-self-update
       - name: Cache cargo deps
         uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: |-
             ~/.cargo/registry/index/
@@ -75,6 +79,7 @@ jobs:
   examples:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         example:
           - custom_bindings
@@ -91,6 +96,7 @@ jobs:
         run: rustup update stable --no-self-update
       - name: Cache cargo deps
         uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: |-
             ~/.cargo/registry/index/

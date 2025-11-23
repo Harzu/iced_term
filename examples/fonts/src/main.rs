@@ -134,7 +134,7 @@ impl App {
         Task::none()
     }
 
-    fn view(&self) -> Element<Event, Theme, iced::Renderer> {
+    fn view(&'_ self) -> Element<'_, Event, Theme, iced::Renderer> {
         let content = column![
             row![
                 button("JetBrains")
