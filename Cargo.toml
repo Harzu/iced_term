@@ -1,6 +1,9 @@
 [workspace]
 members = ["examples/*"]
 
+[workspace.dependencies]
+iced = "0.13.1"
+
 [package]
 name = "iced_term"
 description = "Terminal emulator widget powered by ICED framework and alacritty terminal backend."
@@ -13,7 +16,7 @@ license = "MIT"
 
 [dependencies]
 alacritty_terminal = "0.25.0"
-iced = { version = "0.13.1", features = [
+iced = { workspace = true, features = [
     "smol",
     "tokio",
     "canvas",
