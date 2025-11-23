@@ -1,0 +1,27 @@
+name: Deploy to crates.io
+
+on:
+  push:
+    tags: ['*']
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # needed for trusted publishing
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        run: rustup update stable --no-self-update
+      - name: Establish provenance
+        uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+        id: auth
+      - name: Publish to crates.io
+        run: cargo publish -p iced_term
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
