@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD041 MD033 MD045 -->
 <div align="center">
 
 <img src="docs/iced_logo.svg" width="140px" />
@@ -5,8 +6,11 @@
 
 # iced_term
 
-![GitHub License](https://img.shields.io/github/license/Harzu/iced_term)
+[![GitHub License][license-badge]][license-link]
 ![Crates.io Downloads (recent)](https://img.shields.io/crates/dr/iced_term)
+[![crates.io][crates.io-badge]][crates.io-link]
+[![docs.rs][docs.rs-badge]][docs.rs-link]
+[![Rust CI][ci-badge]][ci-link]
 
 Terminal emulator widget powered by ICED framework and alacritty terminal backend.
 
@@ -39,7 +43,7 @@ The widget is currently under development and does not provide full terminal fea
 - Changing Font/Color scheme
 - Hyperlinks processing (hover/open)
 
-This widget was tested on MacOS, Linux and Windows (but only under [WSL2](https://learn.microsoft.com/en-us/windows/wsl/about)).
+This widget was tested on MacOS, Linux and Windows.
 
 ## Installation
 
@@ -54,6 +58,7 @@ From git
 ```toml
 iced_term = { git = "https://github.com/Harzu/iced_term", branch = "master" }
 ```
+
 ## Overview
 
 Interacting with the widget is happened via:
@@ -233,10 +238,27 @@ cargo run --package <example name>
 
 ## Dependencies
 
- - [iced (0.13.1)](https://github.com/iced-rs/iced/tree/master)
- - [alacritty_terminal (0.25.0)](https://github.com/alacritty/alacritty/tree/master/alacritty_terminal)
- - [tokio (1.47.1)](https://github.com/tokio-rs/tokio)
+[![dependency status][deps.rs-badge]][deps.rs-link]
+
+- [alacritty_terminal](https://github.com/alacritty/alacritty) (Apache-2.0)
+- [anyhow](https://github.com/dtolnay/anyhow) (MIT OR Apache-2.0)
+- [iced](https://github.com/iced-rs/iced) (MIT)
+- [iced_core](https://github.com/iced-rs/iced) (MIT)
+- [iced_graphics](https://github.com/iced-rs/iced) (MIT)
+- [open](https://github.com/Byron/open-rs) (MIT)
+- [tokio](https://github.com/tokio-rs/tokio) (MIT)
 
 ## Contributing / Feedback
 
 All feedbacks, issues and pull requests are welcomed! Guidelines is coming soon =)
+
+[license-badge]: https://img.shields.io/github/license/Harzu/iced_term
+[license-link]: https://github.com/Harzu/iced_term/blob/main/LICENSE
+[crates.io-badge]: https://img.shields.io/crates/v/iced_term
+[crates.io-link]: https://crates.io/crates/iced_term
+[docs.rs-badge]: https://img.shields.io/docsrs/iced_term
+[docs.rs-link]: https://docs.rs/iced_term
+[ci-badge]: https://github.com/Harzu/iced_term/actions/workflows/ci.yaml/badge.svg
+[ci-link]: https://github.com/Harzu/iced_term/actions/workflows/ci.yaml
+[deps.rs-badge]: https://img.shields.io/deps-rs/iced_term/latest?style=for-the-badge&label=dependency%20status
+[deps.rs-link]: https://deps.rs/crate/iced_term
