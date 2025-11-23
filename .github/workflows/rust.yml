@@ -41,7 +41,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-linting-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-linting-cargo-cache-${{ hashFiles('Cargo.lock') }}
       - name: Run clippy
         run: cargo clippy --no-deps --all-features -- -D warnings
       - name: Run rustfmt
@@ -68,7 +68,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-testing-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-testing-cargo-cache-${{ hashFiles('Cargo.lock') }}
       - name: Run tests
         run: cargo test --all-features --lib --verbose
   
@@ -96,7 +96,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-example-${{ matrix.example }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-example-${{ matrix.example }}-cargo-cache-${{ hashFiles('Cargo.lock') }}
       - name: Build examples
         env:
           EXAMPLE: ${{ matrix.example }}
