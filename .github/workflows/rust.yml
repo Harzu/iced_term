@@ -41,7 +41,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-linting-cargo-cache-${{ hashFiles('Cargo.lock') }}
+          key: ${{ runner.os }}-linting-cargo-cache-${{ github.ref }}
       - name: Run clippy
         run: cargo clippy --no-deps --all-features -- -D warnings
       - name: Run rustfmt
