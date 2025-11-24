@@ -138,7 +138,7 @@ impl App {
 }
 ```
 
-**Step 3.** Add event kind to **Events/Messages** enum that will be container of internal widget events for application's **Events/Messages**. You will have to wrap inner widget events via `.map(Event::Terminal)` where it's necessary. 
+**Step 3.** Add event kind to **Events/Messages** enum that will be container of internal widget events for application's **Events/Messages**. You will have to wrap inner widget events via `.map(Event::Terminal)` where it's necessary.
 
 ```rust
 #[derive(Debug, Clone)]
@@ -258,7 +258,7 @@ All feedbacks, issues and pull requests are welcomed! Guidelines is coming soon 
 [crates.io-link]: https://crates.io/crates/iced_term
 [docs.rs-badge]: https://img.shields.io/docsrs/iced_term
 [docs.rs-link]: https://docs.rs/iced_term
-[ci-badge]: https://github.com/Harzu/iced_term/actions/workflows/ci.yaml/badge.svg
-[ci-link]: https://github.com/Harzu/iced_term/actions/workflows/ci.yaml
+[ci-badge]: https://github.com/Harzu/iced_term/actions/workflows/rust.yml/badge.svg
+[ci-link]: https://github.com/Harzu/iced_term/actions/workflows/rust.yml
 [deps.rs-badge]: https://img.shields.io/deps-rs/iced_term/latest?style=for-the-badge&label=dependency%20status
 [deps.rs-link]: https://deps.rs/crate/iced_term
