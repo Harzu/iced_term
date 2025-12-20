@@ -19,8 +19,8 @@ use iced_core::keyboard::{Key, Modifiers};
 use iced_core::mouse::{self, Click};
 use iced_core::text::{LineHeight, Shaping};
 use iced_core::widget::operation;
-use iced_graphics::core::widget::{tree, Tree};
-use iced_graphics::core::Widget;
+use iced_core::widget::{tree, Tree};
+use iced_core::Widget;
 use iced_graphics::geometry::Stroke;
 
 pub struct TerminalView<'a> {
@@ -36,16 +36,10 @@ impl<'a> TerminalView<'a> {
             .into()
     }
 
-    pub fn focus<Message: 'static>(
-        id: iced::widget::text_input::Id,
-    ) -> iced::Task<Message> {
-        iced::widget::text_input::focus(id)
-    }
-
     fn is_cursor_in_layout(
         &self,
         cursor: Cursor,
-        layout: iced_graphics::core::Layout<'_>,
+        layout: iced_core::Layout<'_>,
     ) -> bool {
         if let Some(cursor_position) = cursor.position() {
             let layout_position = layout.position();
@@ -261,7 +255,7 @@ impl<'a> TerminalView<'a> {
     fn handle_keyboard_event(
         &self,
         state: &mut TerminalViewState,
-        clipboard: &mut dyn iced_graphics::core::Clipboard,
+        clipboard: &mut dyn iced_core::Clipboard,
         event: iced::keyboard::Event,
     ) -> Option<Command> {
         let mut binding_action = BindingAction::Ignore;
@@ -358,7 +352,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     }
 
     fn layout(
-        &self,
+        &mut self,
         _tree: &mut Tree,
         _renderer: &iced::Renderer,
         limits: &iced_core::layout::Limits,
@@ -368,15 +362,15 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     }
 
     fn operate(
-        &self,
+        &mut self,
         tree: &mut Tree,
-        _layout: iced_core::Layout<'_>,
+        layout: iced_core::Layout<'_>,
         _renderer: &iced::Renderer,
         operation: &mut dyn operation::Operation,
     ) {
         let state = tree.state.downcast_mut::<TerminalViewState>();
-        let wid = iced_core::widget::Id::from(self.term.widget_id());
-        operation.focusable(state, Some(&wid));
+        let wid = self.term.widget_id();
+        operation.focusable(Some(&wid), layout.bounds(), state);
     }
 
     fn draw(
@@ -384,8 +378,8 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         tree: &Tree,
         renderer: &mut iced::Renderer,
         _theme: &Theme,
-        _style: &iced::advanced::renderer::Style,
-        layout: iced::advanced::Layout,
+        _style: &iced_core::renderer::Style,
+        layout: iced_core::Layout<'_>,
         _cursor: Cursor,
         viewport: &Rectangle,
     ) {
@@ -554,10 +548,11 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                         font,
                         size: iced_core::Pixels(font_size),
                         color: fg,
-                        horizontal_alignment: Horizontal::Center,
-                        vertical_alignment: Vertical::Center,
+                        align_x: Horizontal::Center.into(),
+                        align_y: Vertical::Center,
                         shaping: Shaping::Advanced,
                         line_height: LineHeight::Relative(font_scale_factor),
+                        max_width: cell_width,
                     };
                     frame.fill_text(text);
                 }
@@ -576,17 +571,17 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         renderer.draw_geometry(geom);
     }
 
-    fn on_event(
+    fn update(
         &mut self,
         tree: &mut Tree,
-        event: iced::Event,
-        layout: iced_graphics::core::Layout<'_>,
+        event: &iced::Event,
+        layout: iced_core::Layout<'_>,
         cursor: Cursor,
         _renderer: &iced::Renderer,
-        clipboard: &mut dyn iced_graphics::core::Clipboard,
-        shell: &mut iced_graphics::core::Shell<'_, Event>,
+        clipboard: &mut dyn iced_core::Clipboard,
+        shell: &mut iced_core::Shell<'_, Event>,
         _viewport: &Rectangle,
-    ) -> iced::event::Status {
+    ) {
         let state = tree.state.downcast_mut::<TerminalViewState>();
         let layout_size = layout.bounds().size();
         if state.size != layout_size {
@@ -598,36 +593,37 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
             shell.publish(Event::BackendCall(self.term.id, cmd));
         }
 
-        if !state.is_focused {
-            return iced::event::Status::Ignored;
+        let is_mouse_in_layout =
+            matches!(event, iced::Event::Mouse(_)) && self.is_cursor_in_layout(cursor, layout);
+
+        if is_mouse_in_layout {
+            if let iced::Event::Mouse(iced::mouse::Event::ButtonPressed(
+                iced_core::mouse::Button::Left,
+            )) = event
+            {
+                shell.publish(Event::Focus(self.term.id));
+            }
         }
 
         let commands = match event {
-            iced::Event::Mouse(mouse_event)
-                if self.is_cursor_in_layout(cursor, layout) =>
-            {
-                self.handle_mouse_event(
-                    state,
-                    layout.position(),
-                    cursor.position().unwrap(), // Assuming cursor position is always available here.
-                    mouse_event,
-                )
-            },
-            iced::Event::Keyboard(keyboard_event) => {
-                self.handle_keyboard_event(state, clipboard, keyboard_event)
-                    .into_iter() // Convert Option to iterator (0 or 1 element)
-                    .collect()
-            },
-            _ => Vec::new(), // No commands for other events.
+            iced::Event::Mouse(mouse_event) if is_mouse_in_layout => self.handle_mouse_event(
+                state,
+                layout.position(),
+                cursor.position().unwrap(), // cursor position is always available here.
+                mouse_event.clone(),
+            ),
+            iced::Event::Keyboard(keyboard_event) if state.is_focused => self
+                .handle_keyboard_event(state, clipboard, keyboard_event.clone())
+                .into_iter()
+                .collect(),
+            _ => Vec::new(),
         };
 
-        if commands.is_empty() {
-            iced::event::Status::Ignored
-        } else {
+        if !commands.is_empty() {
             for cmd in commands {
                 shell.publish(Event::BackendCall(self.term.id, cmd));
             }
-            iced::event::Status::Captured
+            shell.capture_event();
         }
     }
 
@@ -677,7 +673,7 @@ struct TerminalViewState {
 impl TerminalViewState {
     fn new() -> Self {
         Self {
-            is_focused: true,
+            is_focused: false,
             is_dragged: false,
             last_click: None,
             scroll_pixels: 0.0,

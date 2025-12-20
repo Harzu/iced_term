@@ -189,6 +189,10 @@ impl Backend {
         })
     }
 
+    pub fn shutdown(&mut self) {
+        let _ = self.notifier.0.send(Msg::Shutdown);
+    }
+
     pub fn handle(&mut self, cmd: Command) -> Action {
         let mut action = Action::default();
         let term = self.term.clone();
@@ -512,6 +516,40 @@ impl Backend {
 
     pub fn renderable_content(&self) -> &RenderableContent {
         &self.last_content
+    }
+
+    pub fn dump_text(&mut self) -> String {
+        self.sync();
+
+        let grid = &self.last_content.grid;
+        let cols = grid.columns();
+        let top = grid.topmost_line().0;
+        let bottom = grid.bottommost_line().0;
+
+        let mut out = String::new();
+        for line_i in top..=bottom {
+            let row = &grid[Line(line_i)];
+
+            let mut end = cols;
+            while end > 0 && row[Column(end - 1)].c == ' ' {
+                end -= 1;
+            }
+
+            for col_i in 0..end {
+                let cell = &row[Column(col_i)];
+                out.push(cell.c);
+                if let Some(zw) = cell.zerowidth() {
+                    for &ch in zw {
+                        out.push(ch);
+                    }
+                }
+            }
+
+            if line_i != bottom {
+                out.push('\n');
+            }
+        }
+        out
     }
 
     /// Based on alacritty/src/display/hint.rs > regex_match_at

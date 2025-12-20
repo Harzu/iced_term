@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 #[derive(Debug, Clone)]
 pub enum Event {
     BackendCall(u64, backend::Command),
+    Focus(u64),
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +42,7 @@ impl Terminal {
         let theme = Theme::new(settings.theme);
         let font = TermFont::new(settings.font);
 
-        Ok(Self {
+        let mut terminal = Self {
             id,
             font,
             theme,
@@ -53,17 +54,20 @@ impl Terminal {
                 settings.backend,
             )?,
             backend_event_rx: Arc::new(Mutex::new(backend_event_rx)),
-        })
+        };
+
+        terminal.sync_and_redraw();
+        Ok(terminal)
     }
 
-    pub fn widget_id(&self) -> iced::widget::text_input::Id {
-        iced::widget::text_input::Id::new(self.id.to_string())
+    pub fn widget_id(&self) -> iced::widget::Id {
+        iced::widget::Id::from(self.id.to_string())
     }
 
     pub fn subscription(&self) -> impl Stream<Item = Event> {
         let id = self.id;
         let event_receiver = self.backend_event_rx.clone();
-        iced::stream::channel(100, move |mut output| async move {
+        iced::stream::channel(100, async move |mut output| {
             let mut shutdown = false;
             loop {
                 let mut event_receiver = event_receiver.lock().await;
@@ -90,6 +94,10 @@ impl Terminal {
         })
     }
 
+    pub fn event_receiver(&self) -> Arc<Mutex<Receiver<AlacrittyEvent>>> {
+        self.backend_event_rx.clone()
+    }
+
     pub fn handle(&mut self, cmd: Command) -> Action {
         let mut action = Action::default();
 
@@ -110,6 +118,15 @@ impl Terminal {
 
         self.sync_and_redraw();
         action
+    }
+
+    pub fn shutdown(&mut self) {
+        self.backend.shutdown();
+        self.redraw();
+    }
+
+    pub fn dump_text(&mut self) -> String {
+        self.backend.dump_text()
     }
 
     fn sync_and_redraw(&mut self) {

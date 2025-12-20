@@ -40,17 +40,27 @@ fn font_measure(
     scale_factor: f32,
     font_type: Font,
 ) -> Size<f32> {
+    let fallback = Size::new(
+        (font_size * 0.6).max(4.0),
+        (font_size * scale_factor).max(8.0),
+    );
+
     let paragraph = paragraph::Paragraph::with_text(Text {
         content: "m",
         font: font_type,
         size: iced_core::Pixels(font_size),
-        vertical_alignment: Vertical::Center,
-        horizontal_alignment: Horizontal::Center,
+        align_x: Horizontal::Center.into(),
+        align_y: Vertical::Center,
         shaping: TextShaping::Advanced,
         line_height: LineHeight::Relative(scale_factor),
-        bounds: Size::INFINITY,
+        bounds: Size::INFINITE,
         wrapping: iced_core::text::Wrapping::Glyph,
     });
 
-    paragraph.min_bounds()
+    let measured = paragraph.min_bounds();
+
+    Size::new(
+        measured.width.max(fallback.width),
+        measured.height.max(fallback.height),
+    )
 }

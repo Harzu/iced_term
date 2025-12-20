@@ -1,8 +1,8 @@
 pub mod actions;
+pub mod backend;
 pub mod bindings;
 pub mod settings;
 
-mod backend;
 mod font;
 mod terminal;
 mod theme;
