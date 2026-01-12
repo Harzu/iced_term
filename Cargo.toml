@@ -2,7 +2,7 @@
 members = ["examples/*"]
 
 [workspace.dependencies]
-iced = "0.13.1"
+iced = "0.14.0"
 
 [package]
 name = "iced_term"
