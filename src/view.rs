@@ -8,7 +8,7 @@ use alacritty_terminal::index::Point as TerminalGridPoint;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{cell, TermMode};
 use alacritty_terminal::vte::ansi::{self as ansi, NamedColor};
-use iced::alignment::{Horizontal, Vertical};
+use iced::alignment::Vertical;
 use iced::font::{Style as FontStyle, Weight as FontWeight};
 use iced::mouse::{Cursor, ScrollDelta};
 use iced::widget::canvas::{Path, Text};
@@ -17,7 +17,7 @@ use iced::{Color, Element, Length, Point, Rectangle, Size, Theme};
 use iced_core::clipboard::Kind as ClipboardKind;
 use iced_core::keyboard::{Key, Modifiers};
 use iced_core::mouse::{self, Click};
-use iced_core::text::{LineHeight, Shaping};
+use iced_core::text::{Alignment, LineHeight, Shaping};
 use iced_core::widget::operation;
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
@@ -37,9 +37,9 @@ impl<'a> TerminalView<'a> {
     }
 
     pub fn focus<Message: 'static>(
-        id: iced::widget::text_input::Id,
+        id: iced::widget::Id,
     ) -> iced::Task<Message> {
-        iced::widget::text_input::focus(id)
+        iced::widget::operation::focus(id)
     }
 
     fn is_cursor_in_layout(
@@ -75,7 +75,7 @@ impl<'a> TerminalView<'a> {
         state: &mut TerminalViewState,
         layout_position: Point,
         cursor_position: Point,
-        event: iced::mouse::Event,
+        event: &iced::mouse::Event,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
         let terminal_content = self.term.backend.renderable_content();
@@ -115,7 +115,7 @@ impl<'a> TerminalView<'a> {
             iced::mouse::Event::WheelScrolled { delta } => {
                 Self::handle_wheel_scrolled(
                     state,
-                    delta,
+                    *delta,
                     &self.term.font.measure,
                     &mut commands,
                 );
@@ -167,7 +167,7 @@ impl<'a> TerminalView<'a> {
     fn handle_cursor_moved(
         state: &mut TerminalViewState,
         terminal_content: &RenderableContent,
-        position: Point,
+        position: &Point,
         layout_position: Point,
         commands: &mut Vec<Command>,
     ) {
@@ -262,13 +262,13 @@ impl<'a> TerminalView<'a> {
         &self,
         state: &mut TerminalViewState,
         clipboard: &mut dyn iced_graphics::core::Clipboard,
-        event: iced::keyboard::Event,
+        event: &iced::keyboard::Event,
     ) -> Option<Command> {
         let mut binding_action = BindingAction::Ignore;
         let last_content = self.term.backend.renderable_content();
         match event {
             iced::keyboard::Event::ModifiersChanged(m) => {
-                state.keyboard_modifiers = m;
+                state.keyboard_modifiers = *m;
                 let action = if state.keyboard_modifiers == Modifiers::COMMAND {
                     LinkAction::Hover
                 } else {
@@ -304,7 +304,7 @@ impl<'a> TerminalView<'a> {
                 Key::Named(code) => {
                     binding_action = self.term.bindings.get_action(
                         InputKind::KeyCode(*code),
-                        modifiers,
+                        *modifiers,
                         last_content.terminal_mode,
                     );
                 },
@@ -358,7 +358,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     }
 
     fn layout(
-        &self,
+        &mut self,
         _tree: &mut Tree,
         _renderer: &iced::Renderer,
         limits: &iced_core::layout::Limits,
@@ -368,15 +368,15 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     }
 
     fn operate(
-        &self,
+        &mut self,
         tree: &mut Tree,
-        _layout: iced_core::Layout<'_>,
+        layout: iced_core::Layout<'_>,
         _renderer: &iced::Renderer,
         operation: &mut dyn operation::Operation,
     ) {
         let state = tree.state.downcast_mut::<TerminalViewState>();
-        let wid = iced_core::widget::Id::from(self.term.widget_id());
-        operation.focusable(state, Some(&wid));
+        let wid = self.term.widget_id();
+        operation.focusable(Some(wid), layout.bounds(), state);
     }
 
     fn draw(
@@ -549,15 +549,16 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                         font.style = FontStyle::Italic;
                     }
                     let text = Text {
-                        content: indexed.c.to_string(),
+                        content: indexed.cell.c.to_string(),
                         position: Point::new(cell_center_x, cell_center_y),
                         font,
                         size: iced_core::Pixels(font_size),
                         color: fg,
-                        horizontal_alignment: Horizontal::Center,
-                        vertical_alignment: Vertical::Center,
+                        align_x: Alignment::Center,
+                        align_y: Vertical::Center,
                         shaping: Shaping::Advanced,
                         line_height: LineHeight::Relative(font_scale_factor),
+                        ..Default::default()
                     };
                     frame.fill_text(text);
                 }
@@ -576,17 +577,17 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         renderer.draw_geometry(geom);
     }
 
-    fn on_event(
+    fn update(
         &mut self,
         tree: &mut Tree,
-        event: iced::Event,
+        event: &iced_core::Event,
         layout: iced_graphics::core::Layout<'_>,
         cursor: Cursor,
         _renderer: &iced::Renderer,
         clipboard: &mut dyn iced_graphics::core::Clipboard,
         shell: &mut iced_graphics::core::Shell<'_, Event>,
         _viewport: &Rectangle,
-    ) -> iced::event::Status {
+    ) {
         let state = tree.state.downcast_mut::<TerminalViewState>();
         let layout_size = layout.bounds().size();
         if state.size != layout_size {
@@ -599,7 +600,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         }
 
         if !state.is_focused {
-            return iced::event::Status::Ignored;
+            return;
         }
 
         let commands = match event {
@@ -621,13 +622,8 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
             _ => Vec::new(), // No commands for other events.
         };
 
-        if commands.is_empty() {
-            iced::event::Status::Ignored
-        } else {
-            for cmd in commands {
-                shell.publish(Event::BackendCall(self.term.id, cmd));
-            }
-            iced::event::Status::Captured
+        for cmd in commands {
+            shell.publish(Event::BackendCall(self.term.id, cmd));
         }
     }
 
@@ -912,7 +908,7 @@ mod tests {
                 TerminalView::handle_cursor_moved(
                     &mut state,
                     &terminal_content,
-                    cursor_position,
+                    &cursor_position,
                     layout_position,
                     &mut commands,
                 );
@@ -933,7 +929,7 @@ mod tests {
             TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
-                cursor_position,
+                &cursor_position,
                 layout_position,
                 &mut commands,
             );
@@ -959,7 +955,7 @@ mod tests {
             TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
-                cursor_position,
+                &cursor_position,
                 layout_position,
                 &mut commands,
             );
@@ -994,7 +990,7 @@ mod tests {
             TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
-                cursor_position,
+                &cursor_position,
                 layout_position,
                 &mut commands,
             );
@@ -1020,7 +1016,7 @@ mod tests {
             TerminalView::handle_cursor_moved(
                 &mut state,
                 &terminal_content,
-                cursor_position,
+                &cursor_position,
                 layout_position,
                 &mut commands,
             );

@@ -5,8 +5,11 @@ use crate::font::TermFont;
 use crate::settings::{FontSettings, Settings, ThemeSettings};
 use crate::theme::{ColorPalette, Theme};
 use crate::AlacrittyEvent;
-use iced::futures::{SinkExt, Stream};
+use iced::Subscription;
+use iced::futures::stream::BoxStream;
+use iced::futures::{SinkExt, StreamExt};
 use iced::widget::canvas::Cache;
+use std::hash::{Hash, Hasher};
 use std::io::Result;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver};
@@ -27,6 +30,7 @@ pub enum Command {
 
 pub struct Terminal {
     pub id: u64,
+    widget_id: iced::widget::Id,
     pub(crate) font: TermFont,
     pub(crate) theme: Theme,
     pub(crate) cache: Cache,
@@ -43,6 +47,7 @@ impl Terminal {
 
         Ok(Self {
             id,
+            widget_id: iced::widget::Id::unique(),
             font,
             theme,
             bindings: BindingsLayout::default(),
@@ -56,38 +61,17 @@ impl Terminal {
         })
     }
 
-    pub fn widget_id(&self) -> iced::widget::text_input::Id {
-        iced::widget::text_input::Id::new(self.id.to_string())
+    pub fn widget_id(&self) -> &iced::widget::Id {
+        &self.widget_id
     }
 
-    pub fn subscription(&self) -> impl Stream<Item = Event> {
-        let id = self.id;
-        let event_receiver = self.backend_event_rx.clone();
-        iced::stream::channel(100, move |mut output| async move {
-            let mut shutdown = false;
-            loop {
-                let mut event_receiver = event_receiver.lock().await;
-                match event_receiver.recv().await {
-                    Some(event) => {
-                        if let AlacrittyEvent::Exit = event {
-                            shutdown = true
-                        };
+    pub fn subscription(&self) -> Subscription<Event> {
+        let data = TerminalSubscriptionData {
+            id: self.id,
+            event_receiver: self.backend_event_rx.clone(),
+        };
 
-                        output
-                            .send(Event::BackendCall(id, backend::Command::ProcessAlacrittyEvent(event)))
-                            .await
-                            .unwrap_or_else(|_| {
-                                panic!("iced_term stream {}: sending BackendEventReceived event is failed", id)
-                            });
-                    },
-                    None => {
-                        if !shutdown {
-                            panic!("iced_term stream {}: terminal event channel closed unexpected", id);
-                        }
-                    },
-                }
-            }
-        })
+        Subscription::run_with(data, terminal_subscription_stream)
     }
 
     pub fn handle(&mut self, cmd: Command) -> Action {
@@ -127,4 +111,49 @@ impl Terminal {
     fn redraw(&mut self) {
         self.cache.clear();
     }
+}
+
+#[derive(Clone)]
+struct TerminalSubscriptionData {
+    id: u64,
+    event_receiver: Arc<Mutex<Receiver<AlacrittyEvent>>>,
+}
+
+impl Hash for TerminalSubscriptionData {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+fn terminal_subscription_stream(
+    data: &TerminalSubscriptionData,
+) -> BoxStream<'static, Event> {
+    let id = data.id;
+    let event_receiver = data.event_receiver.clone();
+    iced::stream::channel(1000, async move |mut output| {
+        let mut shutdown = false;
+        loop {
+            let mut event_receiver = event_receiver.lock().await;
+            match event_receiver.recv().await {
+                Some(event) => {
+                    if let AlacrittyEvent::Exit = event {
+                        shutdown = true
+                    };
+
+                    output
+                        .send(Event::BackendCall(id, backend::Command::ProcessAlacrittyEvent(event)))
+                        .await
+                        .unwrap_or_else(|_| {
+                            panic!("iced_term stream {}: sending BackendEventReceived event is failed", id)
+                        });
+                },
+                None => {
+                    if !shutdown {
+                        panic!("iced_term stream {}: terminal event channel closed unexpected", id);
+                    }
+                },
+            }
+        }
+    })
+    .boxed()
 }
