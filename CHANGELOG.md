@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0]
+
+### Changed
+
+- (**breaking changes**) Now the Terminal's method `subscription` return `Subscription<Event>` instead of `impl Stream<Item = Event>`
+- Upgrade `iced` to `0.14.0`
+- Upgrade `iced_graphics` to `0.14.0`
+- Upgrade `iced_core` to `0.14.0`
+- Upgrade `tokio` to `1.49.0`
+- Satisfy clippy lint about implicit lifetimes (thanks [@2bndy5](https://github.com/2bndy5))
+- revise CI (thanks [@2bndy5](https://github.com/2bndy5))
+
+### Added
+
+- Allow to specify environment variables and working directory in `BackendSettings` (thanks [@ben-hansske](https://github.com/ben-hansske))
+- Add badges in `README.md` (thanks [@2bndy5](https://github.com/2bndy5))
+- Enable dependabot (thanks [@2bndy5](https://github.com/2bndy5))
+
+### Fixed
+
+- Get examples working on Windows (thanks [@2bndy5](https://github.com/2bndy5))
+
 ## [0.6.0]
 
 ### Added
@@ -36,5 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (**breaking changes**) `iced_term::Subscription`
 
-[unreleased]: https://github.com/Harzu/iced_term/compare/0.6.0...HEAD
+[unreleased]: https://github.com/Harzu/iced_term/compare/0.7.0...HEAD
+[0.7.0]: https://github.com/Harzu/iced_term/compare/0.6.0...0.7.0
 [0.6.0]: https://github.com/Harzu/iced_term/compare/0.5.1...0.6.0
