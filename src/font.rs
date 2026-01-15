@@ -1,8 +1,8 @@
 use crate::settings::FontSettings;
 use iced::{Font, Size};
 use iced_core::{
-    alignment::{Horizontal, Vertical},
-    text::{LineHeight, Paragraph, Shaping as TextShaping},
+    alignment::Vertical,
+    text::{Alignment, LineHeight, Paragraph, Shaping as TextShaping},
     Text,
 };
 use iced_graphics::text::paragraph;
@@ -44,11 +44,11 @@ fn font_measure(
         content: "m",
         font: font_type,
         size: iced_core::Pixels(font_size),
-        vertical_alignment: Vertical::Center,
-        horizontal_alignment: Horizontal::Center,
+        align_y: Vertical::Center,
+        align_x: Alignment::Center,
         shaping: TextShaping::Advanced,
         line_height: LineHeight::Relative(scale_factor),
-        bounds: Size::INFINITY,
+        bounds: Size::INFINITE,
         wrapping: iced_core::text::Wrapping::Glyph,
     });
 

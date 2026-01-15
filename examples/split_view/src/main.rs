@@ -12,15 +12,15 @@ const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
 );
 
 fn main() -> iced::Result {
-    iced::application(App::title, App::update, App::view)
-        .antialiasing(false)
+    iced::application(App::new, App::update, App::view)
+        .title(App::title)
         .window_size(Size {
             width: 1280.0,
             height: 720.0,
         })
         .subscription(App::subscription)
         .font(TERM_FONT_JET_BRAINS_BYTES)
-        .run_with(App::new)
+        .run()
 }
 
 struct App {
@@ -106,7 +106,7 @@ impl App {
                 )
                 .expect("failed to create the new terminal instance");
 
-                let command = TerminalView::focus(tab.widget_id());
+                let command = TerminalView::focus(tab.widget_id().clone());
                 self.tabs.insert(self.panes_created as u64, tab);
 
                 if let Some((pane, _)) = result {
@@ -122,7 +122,9 @@ impl App {
                     self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
 
                 self.focus = Some(pane);
-                return TerminalView::focus(new_focused_tab.widget_id());
+                return TerminalView::focus(
+                    new_focused_tab.widget_id().clone(),
+                );
             },
             Event::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
@@ -139,9 +141,11 @@ impl App {
                         .get_mut(&(new_focused_pane.id as u64))
                         .unwrap();
 
-                    return TerminalView::focus(new_focused_tab.widget_id());
+                    return TerminalView::focus(
+                        new_focused_tab.widget_id().clone(),
+                    );
                 } else {
-                    return window::get_latest().and_then(window::close);
+                    return window::latest().and_then(window::close);
                 }
             },
             Event::Terminal(iced_term::Event::BackendCall(id, cmd)) => {
@@ -213,8 +217,7 @@ impl App {
         let mut subscriptions = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            subscriptions
-                .push(Subscription::run_with_id(tab.id, tab.subscription()));
+            subscriptions.push(tab.subscription());
         }
 
         Subscription::batch(subscriptions).map(Event::Terminal)

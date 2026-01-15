@@ -50,7 +50,7 @@ This widget was tested on MacOS, Linux and Windows.
 From crates.io
 
 ```toml
-iced_term = "0.6.0"
+iced_term = "0.7.0"
 ```
 
 From git
@@ -159,7 +159,7 @@ impl App {
                 match self.term.handle(iced_term::Command::ProxyToBackend(cmd))
                 {
                     iced_term::actions::Action::Shutdown => {
-                        return window::get_latest().and_then(window::close)
+                        return window::latest().and_then(window::close)
                     },
                     _ => {},
                 }
@@ -191,8 +191,7 @@ impl App {
 impl App {
     // ... other methods
     fn subscription(&self) -> Subscription<Event> {
-        Subscription::run_with_id(self.term.id, self.term.subscription())
-            .map(Event::Terminal)
+        self.term.subscription().map(Event::Terminal)
     }
 }
 ```
@@ -201,14 +200,14 @@ impl App {
 
 ```rust
 fn main() -> iced::Result {
-    iced::application(App::title, App::update, App::view)
-        .antialiasing(false)
+    iced::application(App::new, App::update, App::view)
+        .title(App::title)
         .window_size(Size {
             width: 1280.0,
             height: 720.0,
         })
         .subscription(App::subscription)
-        .run_with(App::new)
+        .run()
 }
 ```
 
