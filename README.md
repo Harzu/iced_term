@@ -50,7 +50,7 @@ This widget was tested on MacOS, Linux and Windows.
 From crates.io
 
 ```toml
-iced_term = "0.6.0"
+iced_term = "0.7.0"
 ```
 
 From git
