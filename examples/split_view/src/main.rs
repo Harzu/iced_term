@@ -122,7 +122,9 @@ impl App {
                     self.tabs.get_mut(&(new_focused_pane.id as u64)).unwrap();
 
                 self.focus = Some(pane);
-                return TerminalView::focus(new_focused_tab.widget_id().clone());
+                return TerminalView::focus(
+                    new_focused_tab.widget_id().clone(),
+                );
             },
             Event::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
@@ -139,7 +141,9 @@ impl App {
                         .get_mut(&(new_focused_pane.id as u64))
                         .unwrap();
 
-                    return TerminalView::focus(new_focused_tab.widget_id().clone());
+                    return TerminalView::focus(
+                        new_focused_tab.widget_id().clone(),
+                    );
                 } else {
                     return window::latest().and_then(window::close);
                 }
@@ -213,8 +217,7 @@ impl App {
         let mut subscriptions = vec![];
         for id in self.tabs.keys() {
             let tab = self.tabs.get(id).unwrap();
-            subscriptions
-                .push(tab.subscription());
+            subscriptions.push(tab.subscription());
         }
 
         Subscription::batch(subscriptions).map(Event::Terminal)

@@ -1,7 +1,9 @@
 use crate::settings::FontSettings;
 use iced::{Font, Size};
 use iced_core::{
-    Text, alignment::Vertical, text::{Alignment, LineHeight, Paragraph, Shaping as TextShaping}
+    alignment::Vertical,
+    text::{Alignment, LineHeight, Paragraph, Shaping as TextShaping},
+    Text,
 };
 use iced_graphics::text::paragraph;
 
