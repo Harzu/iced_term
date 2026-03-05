@@ -2,7 +2,7 @@ pub mod actions;
 pub mod bindings;
 pub mod settings;
 
-mod backend;
+pub mod backend;
 mod font;
 mod terminal;
 mod theme;
