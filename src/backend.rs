@@ -134,7 +134,7 @@ impl From<TerminalSize> for WindowSize {
 pub struct Backend {
     term: Arc<FairMutex<Term<EventProxy>>>,
     size: TerminalSize,
-    notifier: Notifier,
+    notifier: Option<Notifier>,
     last_content: RenderableContent,
     pub(crate) url_regex: RegexSearch,
 }
@@ -183,10 +183,18 @@ impl Backend {
         Ok(Self {
             term: term.clone(),
             size: terminal_size,
-            notifier,
+            notifier: Some(notifier),
             last_content: initial_content,
             url_regex: RegexSearch::new(URL_REGEX).expect("invalid url regexp"),
         })
+    }
+
+    fn notifier(&self) -> &Notifier {
+        self.notifier.as_ref().expect("backend already shut down")
+    }
+
+    fn notifier_mut(&mut self) -> &mut Notifier {
+        self.notifier.as_mut().expect("backend already shut down")
     }
 
     pub fn handle(&mut self, cmd: Command) -> Action {
@@ -203,7 +211,7 @@ impl Backend {
                         action = Action::ChangeTitle(title);
                     },
                     Event::PtyWrite(pty) => {
-                        self.notifier.notify(pty.into_bytes())
+                        self.notifier().notify(pty.into_bytes())
                     },
                     _ => {},
                 };
@@ -324,7 +332,7 @@ impl Backend {
             c
         );
 
-        self.notifier.notify(msg.as_bytes().to_vec());
+        self.notifier().notify(msg.as_bytes().to_vec());
     }
 
     fn normal_mouse_report(&self, point: Point, button: u8, is_utf8: bool) {
@@ -356,7 +364,7 @@ impl Backend {
             msg.push(32 + 1 + line.0 as u8);
         }
 
-        self.notifier.notify(msg);
+        self.notifier().notify(msg);
     }
 
     fn start_selection(
@@ -442,7 +450,8 @@ impl Backend {
         if lines > 0 && cols > 0 {
             self.size.num_lines = lines;
             self.size.num_cols = cols;
-            self.notifier.on_resize(self.size.into());
+            let window_size: WindowSize = self.size.into();
+            self.notifier_mut().on_resize(window_size);
             terminal.resize(TermSize::new(
                 self.size.num_cols as usize,
                 self.size.num_lines as usize,
@@ -451,7 +460,7 @@ impl Backend {
     }
 
     fn write<I: Into<Cow<'static, [u8]>>>(&self, input: I) {
-        self.notifier.notify(input);
+        self.notifier().notify(input);
     }
 
     fn scroll(&mut self, terminal: &mut Term<EventProxy>, delta_value: i32) {
@@ -470,7 +479,7 @@ impl Backend {
                     content.push(line_cmd);
                 }
 
-                self.notifier.notify(content);
+                self.notifier().notify(content);
             } else {
                 terminal.grid_mut().scroll_display(scroll);
             }
@@ -571,7 +580,19 @@ impl Default for RenderableContent {
 
 impl Drop for Backend {
     fn drop(&mut self) {
-        let _ = self.notifier.0.send(Msg::Shutdown);
+        // Move the notifier to a background thread for shutdown.
+        // alacritty_terminal's Pty::drop() sends SIGHUP then calls child.wait()
+        // synchronously — if the child ignores SIGHUP, that blocks forever.
+        // By moving the notifier (and thus the eventual Pty drop) to a background
+        // thread, we keep the UI thread responsive.
+        if let Some(notifier) = self.notifier.take() {
+            std::thread::spawn(move || {
+                let _ = notifier.0.send(Msg::Shutdown);
+                // notifier drops here, on this background thread.
+                // The EventLoop will receive Shutdown, exit its loop,
+                // and drop the Pty — all on this thread, not the UI thread.
+            });
+        }
     }
 }
 
