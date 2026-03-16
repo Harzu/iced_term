@@ -85,6 +85,10 @@ impl<'a> TerminalView<'a> {
             iced_core::mouse::Event::ButtonPressed(
                 iced_core::mouse::Button::Left,
             ) => {
+                if !state.is_focused {
+                    return Vec::default();
+                }
+
                 Self::handle_left_button_pressed(
                     state,
                     &terminal_mode,
@@ -94,6 +98,10 @@ impl<'a> TerminalView<'a> {
                 );
             },
             iced_core::mouse::Event::CursorMoved { position } => {
+                if !state.is_focused {
+                    return Vec::default();
+                }
+
                 Self::handle_cursor_moved(
                     state,
                     self.term.backend.renderable_content(),
@@ -105,6 +113,10 @@ impl<'a> TerminalView<'a> {
             iced_core::mouse::Event::ButtonReleased(
                 iced_core::mouse::Button::Left,
             ) => {
+                if !state.is_focused {
+                    return Vec::default();
+                }
+
                 Self::handle_button_released(
                     state,
                     &terminal_mode,
@@ -599,10 +611,6 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
             shell.publish(Event::BackendCall(self.term.id, cmd));
         }
 
-        if !state.is_focused {
-            return;
-        }
-
         let commands = match event {
             iced::Event::Mouse(mouse_event)
                 if self.is_cursor_in_layout(cursor, layout) =>
@@ -615,6 +623,10 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                 )
             },
             iced::Event::Keyboard(keyboard_event) => {
+                if !state.is_focused {
+                    return;
+                }
+
                 self.handle_keyboard_event(state, clipboard, keyboard_event)
                     .into_iter() // Convert Option to iterator (0 or 1 element)
                     .collect()
