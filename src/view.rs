@@ -634,6 +634,10 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
             _ => Vec::new(), // No commands for other events.
         };
 
+        if !commands.is_empty() {
+            shell.capture_event();
+        }
+
         for cmd in commands {
             shell.publish(Event::BackendCall(self.term.id, cmd));
         }
