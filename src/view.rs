@@ -259,7 +259,7 @@ impl<'a> TerminalView<'a> {
                 commands.push(Command::Scroll(lines as i32));
             },
             ScrollDelta::Pixels { y, .. } => {
-                state.scroll_pixels -= y;
+                state.scroll_pixels += y;
                 let line_height = font_measure.height; // Assume this method exists and gives the height of a line
                 let lines = (state.scroll_pixels / line_height).trunc();
                 state.scroll_pixels %= line_height;
@@ -1216,8 +1216,8 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(commands[0], Command::Scroll(-2)));
-            assert_eq!(state.scroll_pixels, -8.600002);
+            assert!(matches!(commands[0], Command::Scroll(2)));
+            assert_eq!(state.scroll_pixels, 8.600002);
         }
 
         #[test]
@@ -1234,8 +1234,8 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(commands[0], Command::Scroll(3)));
-            assert_eq!(state.scroll_pixels, 5.4000034);
+            assert!(matches!(commands[0], Command::Scroll(-3)));
+            assert_eq!(state.scroll_pixels, -5.4000034);
         }
     }
 }
