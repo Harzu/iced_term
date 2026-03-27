@@ -74,7 +74,7 @@ impl<'a> TerminalView<'a> {
         &mut self,
         state: &mut TerminalViewState,
         layout: iced_graphics::core::Layout<'_>,
-        shell: &mut iced_graphics::core::Shell<'_, Event>
+        shell: &mut iced_graphics::core::Shell<'_, Event>,
     ) {
         let layout_size = layout.bounds().size();
         if state.size != layout_size {
@@ -94,13 +94,10 @@ impl<'a> TerminalView<'a> {
         is_cursor_in_layout: bool,
     ) {
         use iced::Event::Mouse;
-        use iced_core::mouse::{Event::ButtonPressed, Button::Left};
+        use iced_core::mouse::{Button::Left, Event::ButtonPressed};
 
-        match event {
-            Mouse(ButtonPressed(Left)) => {
-                state.focus = is_cursor_in_layout;
-            },
-            _ => {}
+        if let Mouse(ButtonPressed(Left)) = event {
+            state.focus = is_cursor_in_layout;
         }
     }
 
@@ -641,14 +638,13 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         self.handle_focus(event, state, is_cursor_in_layout);
 
         let commands = match event {
-            iced::Event::Mouse(mouse_event) if is_cursor_in_layout => {
-                self.handle_mouse_event(
+            iced::Event::Mouse(mouse_event) if is_cursor_in_layout => self
+                .handle_mouse_event(
                     state,
                     layout.position(),
                     cursor.position().unwrap(),
                     mouse_event,
-                )
-            },
+                ),
             iced::Event::Keyboard(keyboard_event) => {
                 if !state.is_focused() {
                     return;
@@ -658,7 +654,7 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                     .into_iter()
                     .collect()
             },
-            _ => Vec::new(), 
+            _ => Vec::new(),
         };
 
         if !commands.is_empty() {

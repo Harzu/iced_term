@@ -123,7 +123,9 @@ impl App {
         container(
             row![
                 container(editor).width(Length::FillPortion(1)).padding(16),
-                container(terminal).width(Length::FillPortion(1)).padding(16),
+                container(terminal)
+                    .width(Length::FillPortion(1))
+                    .padding(16),
             ]
             .spacing(8)
             .height(Length::Fill),
