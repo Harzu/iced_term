@@ -6,7 +6,7 @@ iced = "0.14.0"
 
 [workspace.package]
 edition = "2021"
-version = "0.7.0"
+version = "0.8.0"
 repository = "https://github.com/Harzu/iced_term"
 license = "MIT"
 
