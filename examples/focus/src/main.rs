@@ -4,7 +4,7 @@ use iced::{window, Font, Length, Size, Subscription, Task, Theme};
 use iced_term::TerminalView;
 
 const TERM_FONT_JET_BRAINS_BYTES: &[u8] = include_bytes!(
-    "../../full_screen/assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
+    "../assets/fonts/JetBrains/JetBrainsMonoNerdFontMono-Bold.ttf"
 );
 
 fn main() -> iced::Result {

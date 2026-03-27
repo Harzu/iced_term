@@ -1,8 +1,8 @@
 [package]
 name = "focus"
 version.workspace = true
-publish = false
 edition.workspace = true
+publish = false
 
 [dependencies]
 iced = { workspace = true }
