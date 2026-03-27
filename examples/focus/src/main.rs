@@ -59,7 +59,7 @@ impl App {
 
         (
             Self {
-                title: String::from("Editor + Terminal"),
+                title: String::from("focus"),
                 editor: text_editor::Content::with_text(
                     "fn main() {\n    println!(\"Hello from iced text editor\");\n}\n",
                 ),
@@ -90,7 +90,7 @@ impl App {
                         return window::latest().and_then(window::close)
                     },
                     iced_term::actions::Action::ChangeTitle(title) => {
-                        self.title = format!("Editor + {title}");
+                        self.title = title;
                     },
                     iced_term::actions::Action::Ignore => {},
                 }
