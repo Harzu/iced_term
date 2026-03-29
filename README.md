@@ -50,7 +50,7 @@ This widget was tested on MacOS, Linux and Windows.
 From crates.io
 
 ```toml
-iced_term = "0.7.0"
+iced_term = "0.8.0"
 ```
 
 From git
@@ -228,6 +228,7 @@ You can also look at [examples](./examples) directory for more information about
 - [custom_bindings](./examples/custom_bindings/) - The example that show how you can add custom keyboard or mouse bindings to your terminal emulator app.
 - [themes](./examples/themes/) - The example that show how you can change terminal color scheme.
 - [fonts](./examples/fonts/) - The examples that show how you can change font type or font size in your terminal emulator app.
+- [focus](./examples/focus/) - The example that show that focus between iced widgets and iced_term works correctly
 
 You can run any example via
 

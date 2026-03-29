@@ -18,7 +18,7 @@ use iced_core::clipboard::Kind as ClipboardKind;
 use iced_core::keyboard::{Key, Modifiers};
 use iced_core::mouse::{self, Click};
 use iced_core::text::{Alignment, LineHeight, Shaping};
-use iced_core::widget::operation;
+use iced_core::widget::operation::{self, Focusable};
 use iced_graphics::core::widget::{tree, Tree};
 use iced_graphics::core::Widget;
 use iced_graphics::geometry::Stroke;
@@ -70,6 +70,37 @@ impl<'a> TerminalView<'a> {
         false
     }
 
+    fn handle_resize(
+        &mut self,
+        state: &mut TerminalViewState,
+        layout: iced_graphics::core::Layout<'_>,
+        shell: &mut iced_graphics::core::Shell<'_, Event>,
+    ) {
+        let layout_size = layout.bounds().size();
+        if state.size != layout_size {
+            state.size = layout_size;
+            let cmd = Command::Resize(
+                Some(layout_size),
+                Some(self.term.font.measure),
+            );
+            shell.publish(Event::BackendCall(self.term.id, cmd));
+        }
+    }
+
+    fn handle_focus(
+        &self,
+        event: &iced_core::Event,
+        state: &mut TerminalViewState,
+        is_cursor_in_layout: bool,
+    ) {
+        use iced::Event::Mouse;
+        use iced_core::mouse::{Button::Left, Event::ButtonPressed};
+
+        if let Mouse(ButtonPressed(Left)) = event {
+            state.focus = is_cursor_in_layout;
+        }
+    }
+
     fn handle_mouse_event(
         &self,
         state: &mut TerminalViewState,
@@ -85,7 +116,7 @@ impl<'a> TerminalView<'a> {
             iced_core::mouse::Event::ButtonPressed(
                 iced_core::mouse::Button::Left,
             ) => {
-                if !state.is_focused {
+                if !state.is_focused() {
                     return Vec::default();
                 }
 
@@ -98,7 +129,7 @@ impl<'a> TerminalView<'a> {
                 );
             },
             iced_core::mouse::Event::CursorMoved { position } => {
-                if !state.is_focused {
+                if !state.is_focused() {
                     return Vec::default();
                 }
 
@@ -113,7 +144,7 @@ impl<'a> TerminalView<'a> {
             iced_core::mouse::Event::ButtonReleased(
                 iced_core::mouse::Button::Left,
             ) => {
-                if !state.is_focused {
+                if !state.is_focused() {
                     return Vec::default();
                 }
 
@@ -601,37 +632,29 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
         _viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<TerminalViewState>();
-        let layout_size = layout.bounds().size();
-        if state.size != layout_size {
-            state.size = layout_size;
-            let cmd = Command::Resize(
-                Some(layout_size),
-                Some(self.term.font.measure),
-            );
-            shell.publish(Event::BackendCall(self.term.id, cmd));
-        }
+        self.handle_resize(state, layout, shell);
+
+        let is_cursor_in_layout = self.is_cursor_in_layout(cursor, layout);
+        self.handle_focus(event, state, is_cursor_in_layout);
 
         let commands = match event {
-            iced::Event::Mouse(mouse_event)
-                if self.is_cursor_in_layout(cursor, layout) =>
-            {
-                self.handle_mouse_event(
+            iced::Event::Mouse(mouse_event) if is_cursor_in_layout => self
+                .handle_mouse_event(
                     state,
                     layout.position(),
-                    cursor.position().unwrap(), // Assuming cursor position is always available here.
+                    cursor.position().unwrap(),
                     mouse_event,
-                )
-            },
+                ),
             iced::Event::Keyboard(keyboard_event) => {
-                if !state.is_focused {
+                if !state.is_focused() {
                     return;
                 }
 
                 self.handle_keyboard_event(state, clipboard, keyboard_event)
-                    .into_iter() // Convert Option to iterator (0 or 1 element)
+                    .into_iter()
                     .collect()
             },
-            _ => Vec::new(), // No commands for other events.
+            _ => Vec::new(),
         };
 
         if !commands.is_empty() {
@@ -677,7 +700,7 @@ impl<'a> From<TerminalView<'a>> for Element<'a, Event, Theme, iced::Renderer> {
 
 #[derive(Debug, Clone)]
 struct TerminalViewState {
-    is_focused: bool,
+    focus: bool,
     is_dragged: bool,
     last_click: Option<mouse::Click>,
     scroll_pixels: f32,
@@ -689,7 +712,7 @@ struct TerminalViewState {
 impl TerminalViewState {
     fn new() -> Self {
         Self {
-            is_focused: true,
+            focus: false,
             is_dragged: false,
             last_click: None,
             scroll_pixels: 0.0,
@@ -708,15 +731,15 @@ impl Default for TerminalViewState {
 
 impl operation::Focusable for TerminalViewState {
     fn is_focused(&self) -> bool {
-        self.is_focused
+        self.focus
     }
 
     fn focus(&mut self) {
-        self.is_focused = true;
+        self.focus = true;
     }
 
     fn unfocus(&mut self) {
-        self.is_focused = false;
+        self.focus = false;
     }
 }
 
