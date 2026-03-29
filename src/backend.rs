@@ -580,6 +580,6 @@ pub struct EventProxy(mpsc::Sender<Event>);
 
 impl EventListener for EventProxy {
     fn send_event(&self, event: Event) {
-        let _ = self.0.blocking_send(event);
+        let _ = self.0.try_send(event);
     }
 }
