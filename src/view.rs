@@ -76,13 +76,6 @@ impl<'a> TerminalView<'a> {
         layout: iced_graphics::core::Layout<'_>,
         shell: &mut iced_graphics::core::Shell<'_, Event>,
     ) {
-        // When Iced's Tree reconciliation recycles this widget state for a
-        // different terminal (e.g., tab switch), reset size to force a resize.
-        if state.terminal_id != Some(self.term.id) {
-            state.terminal_id = Some(self.term.id);
-            state.size = Size::from([0.0, 0.0]);
-        }
-
         let layout_size = layout.bounds().size();
         if state.size != layout_size {
             state.size = layout_size;
@@ -404,7 +397,14 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(TerminalViewState::new())
+        tree::State::new(TerminalViewState::new(self.term.id))
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        let state = tree.state.downcast_mut::<TerminalViewState>();
+        if state.terminal_id != self.term.id {
+            tree.state = self.state();
+        }
     }
 
     fn layout(
@@ -714,11 +714,11 @@ struct TerminalViewState {
     keyboard_modifiers: Modifiers,
     size: Size<f32>,
     mouse_position_on_grid: TerminalGridPoint,
-    terminal_id: Option<u64>,
+    terminal_id: u64,
 }
 
 impl TerminalViewState {
-    fn new() -> Self {
+    fn new(terminal_id: u64) -> Self {
         Self {
             focus: false,
             is_dragged: false,
@@ -727,14 +727,8 @@ impl TerminalViewState {
             keyboard_modifiers: Modifiers::empty(),
             size: Size::from([0.0, 0.0]),
             mouse_position_on_grid: TerminalGridPoint::default(),
-            terminal_id: None,
+            terminal_id,
         }
-    }
-}
-
-impl Default for TerminalViewState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -833,7 +827,7 @@ mod tests {
 
         #[test]
         fn handles_mouse_mode_with_left_click() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let terminal_mode = TermMode::MOUSE_MODE;
             let layout_position = Point { x: 5.0, y: 5.0 };
             let cursor_position = Point { x: 100.0, y: 150.0 };
@@ -877,7 +871,7 @@ mod tests {
             ];
 
             for _selection_type in cases {
-                let mut state = TerminalViewState::new();
+                let mut state = TerminalViewState::new(0);
                 state.keyboard_modifiers = Modifiers::SHIFT;
                 let mut commands = Vec::new();
 
@@ -906,7 +900,7 @@ mod tests {
 
         #[test]
         fn updates_mouse_position_on_grid() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let terminal_content = RenderableContent::default();
             let mut commands = Vec::new();
             let cases = vec![
@@ -967,7 +961,7 @@ mod tests {
 
         #[test]
         fn generates_drag_update_command_when_dragged() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             state.is_dragged = true; // Simulate an ongoing drag operation
             let terminal_content = RenderableContent::default();
             let layout_position = Point { x: 5.0, y: 5.0 };
@@ -991,7 +985,7 @@ mod tests {
 
         #[test]
         fn generates_drag_update_command_when_dragged_in_mouse_motion_mode() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
             terminal_content.terminal_mode = TermMode::MOUSE_MOTION;
@@ -1026,7 +1020,7 @@ mod tests {
         #[test]
         fn generates_drag_update_command_when_dragged_in_srg_mode_with_key_mods(
         ) {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             state.keyboard_modifiers = Modifiers::SHIFT;
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
@@ -1052,7 +1046,7 @@ mod tests {
 
         #[test]
         fn generates_drag_update_and_link_open() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             state.keyboard_modifiers = Modifiers::COMMAND;
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
@@ -1093,7 +1087,7 @@ mod tests {
 
         #[test]
         fn mouse_mode_activated() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let terminal_mode = TermMode::MOUSE_MODE;
             let bindings = BindingsLayout::new();
             let mut commands = Vec::new();
@@ -1123,7 +1117,7 @@ mod tests {
 
         #[test]
         fn link_open_on_button_release() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             state.keyboard_modifiers = Modifiers::COMMAND;
             let terminal_mode = TermMode::MOUSE_MODE;
             let bindings = BindingsLayout::new();
@@ -1164,7 +1158,7 @@ mod tests {
 
         #[test]
         fn link_open_on_button_release_in_non_mouse_mode() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             state.keyboard_modifiers = Modifiers::COMMAND;
             state.mouse_position_on_grid = TerminalGridPoint {
                 line: Line(4),
@@ -1202,7 +1196,7 @@ mod tests {
 
         #[test]
         fn scroll_with_lines_downward() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
@@ -1219,7 +1213,7 @@ mod tests {
 
         #[test]
         fn scroll_with_lines_upward() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
@@ -1236,7 +1230,7 @@ mod tests {
 
         #[test]
         fn scroll_with_pixels_accumulating_downward() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
@@ -1254,7 +1248,7 @@ mod tests {
 
         #[test]
         fn scroll_with_pixels_accumulating_upward() {
-            let mut state = TerminalViewState::new();
+            let mut state = TerminalViewState::new(0);
             let font = TermFont::new(FontSettings::default());
             let mut commands = Vec::new();
 
