@@ -226,7 +226,14 @@ impl<'a> TerminalView<'a> {
         // Handle command or selection update based on terminal mode and modifiers
         if state.is_dragged {
             let terminal_mode = terminal_content.terminal_mode;
-            let cmd = if terminal_mode.intersects(TermMode::MOUSE_MOTION) {
+            // Report drags when the app requested button-motion (1002) or
+            // any-motion (1003) tracking. Checking only MOUSE_MOTION left
+            // 1002-mode apps (e.g. tmux with `mouse on`) seeing press and
+            // release but never the drag, while the widget drew its own
+            // selection over the app's — two selection systems at once.
+            let cmd = if terminal_mode
+                .intersects(TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION)
+            {
                 Command::MouseReport(
                     MouseButton::LeftMove,
                     state.keyboard_modifiers,
@@ -989,6 +996,43 @@ mod tests {
             state.is_dragged = true; // Simulate an ongoing drag operation
             let mut terminal_content = RenderableContent::default();
             terminal_content.terminal_mode = TermMode::MOUSE_MOTION;
+            let layout_position = Point { x: 5.0, y: 5.0 };
+            let cursor_position = Point { x: 100.0, y: 150.0 };
+            let mut commands = Vec::new();
+            let _modifiers = Modifiers::empty();
+
+            TerminalView::handle_cursor_moved(
+                &mut state,
+                &terminal_content,
+                &cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::MouseReport(
+                    MouseButton::LeftMove,
+                    _modifiers,
+                    TerminalGridPoint {
+                        line: Line(49),
+                        column: Column(79),
+                    },
+                    true,
+                )
+            ));
+        }
+
+        #[test]
+        fn reports_drag_when_dragged_in_mouse_drag_mode() {
+            // Button-motion tracking (1002) — what e.g. tmux with `mouse on`
+            // requests — must also report drags, not fall back to the
+            // widget's own selection.
+            let mut state = TerminalViewState::new(0);
+            state.is_dragged = true;
+            let mut terminal_content = RenderableContent::default();
+            terminal_content.terminal_mode = TermMode::MOUSE_DRAG;
             let layout_position = Point { x: 5.0, y: 5.0 };
             let cursor_position = Point { x: 100.0, y: 150.0 };
             let mut commands = Vec::new();
