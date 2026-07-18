@@ -487,6 +487,10 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
                 // Resolve colors for this cell
                 let mut fg = self.term.theme.get_color(indexed.fg);
                 let mut bg = self.term.theme.get_color(indexed.bg);
+                // Pre-swap background: the block cursor is painted in the
+                // cell's (pre-swap) fg, so this is the contrasting color
+                // for the glyph under it regardless of INVERSE/selection.
+                let cell_bg = bg;
 
                 // If the new line was detected,
                 // need to flush pending background rect and init the new one
@@ -588,10 +592,16 @@ impl Widget<Event, Theme, iced::Renderer> for TerminalView<'_> {
 
                 // Draw text
                 if indexed.c != ' ' && indexed.c != '\t' {
+                    // The glyph under the block cursor must contrast with
+                    // the cursor rect (painted above in the cell's pre-swap
+                    // fg). Using the post-swap bg — or gating this on
+                    // APP_CURSOR, a keypad mode unrelated to rendering —
+                    // made the glyph invisible whenever the cell was
+                    // INVERSE or inside a selection.
                     if content.grid.cursor.point == indexed.point
-                        && content.terminal_mode.contains(TermMode::APP_CURSOR)
+                        && content.terminal_mode.contains(TermMode::SHOW_CURSOR)
                     {
-                        fg = bg;
+                        fg = cell_bg;
                     }
                     // Resolve font style (bold/italic) from cell flags
                     let mut font = self.term.font.font_type;
