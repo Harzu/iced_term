@@ -228,7 +228,7 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
         "r",        Modifiers::CTRL; BindingAction::Char('\x12');
         "s",        Modifiers::CTRL; BindingAction::Char('\x13');
         "t",        Modifiers::CTRL; BindingAction::Char('\x14');
-        "u",        Modifiers::CTRL; BindingAction::Char('\x51');
+        "u",        Modifiers::CTRL; BindingAction::Char('\x15');
         "v",        Modifiers::CTRL; BindingAction::Char('\x16');
         "w",        Modifiers::CTRL; BindingAction::Char('\x17');
         "x",        Modifiers::CTRL; BindingAction::Char('\x18');
@@ -296,7 +296,7 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
         "r",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x12');
         "s",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x13');
         "t",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x14');
-        "u",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x51');
+        "u",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x15');
         "v",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x16');
         "w",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x17');
         "x",        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x18');
@@ -360,6 +360,39 @@ mod tests {
         keyboard::{key::Named, Modifiers},
         mouse::Button,
     };
+
+    // Ctrl+<letter> must emit the matching ASCII control code (uppercase - 0x40): a -> 0x01 ... z -> 0x1a.
+    // Guards against a digit transposition (e.g. 0x15 typed as 0x51). Covers the CTRL and SHIFT+CTRL tables.
+    #[test]
+    fn ctrl_letter_bindings_map_to_control_codes() {
+        let ctrl = Modifiers::CTRL;
+        let shift_ctrl = Modifiers::SHIFT | Modifiers::CTRL;
+        for (binding, action) in super::default_keyboard_bindings() {
+            let InputKind::Char(s) = &binding.target else {
+                continue;
+            };
+            // Only single ASCII letters follow the rule (digits, `-`, `[`... have their own codes).
+            let mut chars = s.chars();
+            let (Some(ch), None) = (chars.next(), chars.next()) else {
+                continue;
+            };
+            if !ch.is_ascii_alphabetic() {
+                continue;
+            }
+            if binding.modifiers != ctrl && binding.modifiers != shift_ctrl {
+                continue;
+            }
+            let BindingAction::Char(c) = action else {
+                continue;
+            };
+            let expected = (ch.to_ascii_uppercase() as u32) - 0x40;
+            assert_eq!(
+                c as u32, expected,
+                "Ctrl+{s} should emit 0x{expected:02x}, not 0x{:02x}",
+                c as u32
+            );
+        }
+    }
 
     #[test]
     fn add_new_custom_keyboard_binding() {
